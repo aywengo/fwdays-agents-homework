@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import math
 import os
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -207,6 +208,120 @@ async def get_current_price() -> dict:
     if record and avg:
         out["vs_avg_percent"] = round((record["price_per_kwh"] - avg) / avg * 100, 1)
     return out
+
+
+def _start_hour(label: str) -> int:
+    return int(str(label).split("-", 1)[0])
+
+
+def _clock(hour: int) -> str:
+    return "23:59" if hour >= 24 else f"{hour:02d}:00"
+
+
+def plan_charge_window(
+    records: list[dict],
+    energy_kwh: float,
+    max_charge_kw: float,
+    earliest_hour: int = 0,
+    latest_end_hour: int = 17,
+    peak_end_hour: int = 23,
+    efficiency: float = 0.9,
+    min_spread_pln_kwh: float = 0.2,
+) -> dict[str, Any]:
+    """Cheapest contiguous grid-charge window vs. the most expensive later window.
+
+    Pure function (no I/O) so the decision is deterministic and testable.
+    Grid energy bought = energy_kwh / efficiency; it replaces energy that would
+    otherwise be imported during the evening peak window of the same length.
+    """
+    if energy_kwh <= 0:
+        return {"recommended": False, "reason": "no grid charge needed"}
+    if max_charge_kw <= 0:
+        raise PricesError("max_charge_kw must be positive")
+    hours = max(1, math.ceil(energy_kwh / max_charge_kw))
+    prices = {_start_hour(r["hour"]): float(r["price_per_kwh"])
+              for r in records if r.get("price_per_kwh") is not None}
+
+    def windows(start: int, end: int) -> list[tuple[int, float]]:
+        out = []
+        for h in range(start, end - hours + 1):
+            span = [prices.get(x) for x in range(h, h + hours)]
+            if all(p is not None for p in span):
+                out.append((h, sum(span) / hours))
+        return out
+
+    charge = windows(max(0, earliest_hour), min(24, latest_end_hour))
+    if not charge:
+        return {"recommended": False, "hours_needed": hours,
+                "reason": f"no {hours}h window between {_clock(earliest_hour)} and {_clock(latest_end_hour)}"}
+    c_start, c_avg = min(charge, key=lambda w: w[1])
+    peak = windows(latest_end_hour, min(24, peak_end_hour + 1))
+    p_start, p_avg = max(peak, key=lambda w: w[1]) if peak else (None, None)
+
+    effective = c_avg / efficiency
+    spread = None if p_avg is None else p_avg - effective
+    bought = energy_kwh / efficiency
+    result = {
+        "hours_needed": hours,
+        "energy_to_battery_kwh": round(energy_kwh, 2),
+        "grid_energy_kwh": round(bought, 2),
+        "charge_start": _clock(c_start),
+        "charge_end": _clock(c_start + hours),
+        "charge_avg_pln_kwh": round(c_avg, 4),
+        "charge_cost_pln": round(bought * c_avg, 2),
+        "peak_start": _clock(p_start) if p_start is not None else None,
+        "peak_end": _clock(p_start + hours) if p_start is not None else None,
+        "peak_avg_pln_kwh": round(p_avg, 4) if p_avg is not None else None,
+        "spread_pln_kwh": round(spread, 4) if spread is not None else None,
+        "estimated_saving_pln": round(energy_kwh * spread, 2) if spread is not None else None,
+        "min_spread_pln_kwh": min_spread_pln_kwh,
+        "efficiency": efficiency,
+    }
+    if c_avg <= 0:
+        result.update(recommended=True, reason="zero or negative prices: charging is paid for or free")
+    elif spread is None:
+        result.update(recommended=False, reason="no later peak window to compare against")
+    elif spread >= min_spread_pln_kwh:
+        result.update(recommended=True, reason="peak minus charge price (after losses) exceeds the threshold")
+    else:
+        result.update(recommended=False, reason="price spread too small to cover battery losses and wear")
+    return result
+
+
+@server.tool(annotations=READ_ONLY)
+async def plan_grid_charge(
+    energy_kwh: float,
+    max_charge_kw: float,
+    day: str = "today",
+    latest_end_hour: int = 17,
+    min_spread_pln_kwh: float = 0.2,
+    efficiency: float = 0.9,
+) -> dict:
+    """Find the cheapest window to charge the battery from the grid and say if it pays off.
+
+    Args:
+        energy_kwh: energy to put into the battery from the grid (from the dispatcher's estimate).
+        max_charge_kw: maximum grid charging power of the battery/inverter.
+        day: "today" or "tomorrow". For today, only hours from the current hour onward are used.
+        latest_end_hour: the window must end by this hour (default 17, before the evening peak).
+        min_spread_pln_kwh: required margin between the evening peak price and the
+            charge price after losses (default 0.20 zl/kWh) to recommend charging.
+        efficiency: round-trip efficiency of the battery (default 0.9).
+
+    Returns charge_start/charge_end as HH:MM (ready for the inverter), prices, cost,
+    estimated saving, the evening peak window used for comparison, and
+    `recommended` with a reason.
+    """
+    target = _parse_day(day)
+    data = await fetch_day(target)
+    if not data.get("available"):
+        return {"recommended": False, "date": data.get("date"), "reason": "prices not published yet"}
+    # Today: start no earlier than the next full hour (the current one has begun).
+    earliest = dt.datetime.now(TZ).hour + 1 if target == _today() else 0
+    plan = plan_charge_window(data["records"], energy_kwh, max_charge_kw, earliest_hour=earliest,
+                              latest_end_hour=latest_end_hour, efficiency=efficiency,
+                              min_spread_pln_kwh=min_spread_pln_kwh)
+    return {"date": data["date"], **plan}
 
 
 def main() -> None:

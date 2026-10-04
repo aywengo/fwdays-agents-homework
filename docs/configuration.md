@@ -66,6 +66,20 @@ Control UI (Automations) і знову запустіть `scripts/setup_automat
 | `SOLAX_DEVICE_SN` | ✅ | Приватне | solax-mcp | Серійний номер інвертора. |
 | `SOLAX_ALLOW_CONTROL` | ➖ | — | solax-mcp, render_config | `true` відкриває `set_battery_self_use_mode` (інакше інструмент прибрано і на MCP-сервері, і в OpenClaw). Dispatcher однаково вимагає вашого явного підтвердження, а заплановані завдання його ніколи не отримують. За замовчуванням `false`. |
 
+## Планування заряду батареї (лише dispatcher)
+
+Використовуються для ранкової пропозиції заряду з мережі та налаштувань TOU
+(див. [architecture.md](architecture.md#пропозиція-заряду-та-налаштування-tou)). Без
+`BATTERY_CAPACITY_KWH` і `BATTERY_MAX_CHARGE_KW` звіт працює, але пропозиції не буде.
+
+| Змінна | Обов. | Тип | Хто читає | Опис |
+| --- | --- | --- | --- | --- |
+| `BATTERY_CAPACITY_KWH` | 🔁 | — | solax-mcp | Корисна ємність батареї, кВт·год. |
+| `BATTERY_MAX_CHARGE_KW` | 🔁 | — | solax-mcp | Максимальна потужність заряду з мережі, кВт. Визначає тривалість вікна заряду. |
+| `BATTERY_MIN_SOC` | ➖ | — | solax-mcp | Нижня межа розряду в налаштуваннях інвертора та розрахунках, %. За замовчуванням `15`. |
+| `BATTERY_TARGET_SOC` | ➖ | — | solax-mcp | До якого рівня заряджати з мережі (`charge_upper_soc`), %. За замовчуванням `90`. |
+| `HOME_DAILY_CONSUMPTION_KWH` | 🔁 | — | solax-mcp | Типове добове споживання будинку, кВт·год. Використовується, доки в `memory/energy-log.md` менше трьох вечірніх записів; далі dispatcher бере середнє за 7 днів. |
+
 ## Netatmo (лише weather-cast)
 
 Створіть застосунок на https://dev.netatmo.com/apps з redirect URI

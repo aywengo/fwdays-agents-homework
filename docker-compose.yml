@@ -96,6 +96,12 @@ services:
       SOLAX_CLIENT_SECRET: ${SOLAX_CLIENT_SECRET:?set SOLAX_CLIENT_SECRET in .env}
       SOLAX_DEVICE_SN: ${SOLAX_DEVICE_SN:?set SOLAX_DEVICE_SN in .env}
       SOLAX_ALLOW_CONTROL: ${SOLAX_ALLOW_CONTROL:-false}
+      # Battery planning (estimate_grid_charge_need / build_tou_settings)
+      BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}
+      BATTERY_MAX_CHARGE_KW: ${BATTERY_MAX_CHARGE_KW:-}
+      BATTERY_MIN_SOC: ${BATTERY_MIN_SOC:-15}
+      BATTERY_TARGET_SOC: ${BATTERY_TARGET_SOC:-90}
+      HOME_DAILY_CONSUMPTION_KWH: ${HOME_DAILY_CONSUMPTION_KWH:-}
 
   weather-mcp:
     <<: *mcp

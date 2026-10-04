@@ -12,7 +12,11 @@ oc() { docker compose exec -T openclaw openclaw "$@"; }
 if [[ "${1:-}" == "--list" ]]; then oc automations list; exit 0; fi
 
 TZ_NAME="${HOME_TZ:-Europe/Warsaw}"
-TOOLS="solax-cloud__get_realtime_data,sessions_spawn,sessions_yield,subagents,read,write,memory_search,memory_get"
+# Read-only cap for unattended runs: SolaX data + pure planning tools, delegation,
+# memory. The specialists' MCP tools are listed so a spawned weather-cast/trader
+# keeps them even if the cap is applied to children; the dispatcher itself is
+# still denied those by its agent policy. set_battery_self_use_mode is never included.
+TOOLS="solax-cloud__get_realtime_data,solax-cloud__estimate_grid_charge_need,solax-cloud__build_tou_settings,netatmo-weather__*,rce-prices__*,sessions_spawn,sessions_yield,subagents,read,write,memory_search,memory_get"
 existing="$(oc automations list 2>/dev/null || true)"
 
 targets=()

@@ -5,9 +5,9 @@ streamable HTTP (`MCP_TRANSPORT=http`, bearer token `MCP_AUTH_TOKEN`, health at 
 
 | Command | Server | Tools | Used by |
 | --- | --- | --- | --- |
-| `solax-http-mcp` | Upstream [solax-cloud-mcp](https://github.com/mouldiwarp/solax-cloud-mcp) (pinned commit) | `get_realtime_data`, `set_battery_self_use_mode` (only with `SOLAX_ALLOW_CONTROL=true`) | dispatcher |
+| `solax-http-mcp` | Upstream [solax-cloud-mcp](https://github.com/mouldiwarp/solax-cloud-mcp) (pinned commit) + planning tools | `get_realtime_data`, `estimate_grid_charge_need`, `build_tou_settings`, `set_battery_self_use_mode` (only with `SOLAX_ALLOW_CONTROL=true`) | dispatcher |
 | `netatmo-weather-mcp` | Netatmo station + Open-Meteo forecast | `get_station_readings`, `get_forecast` | weather-cast |
-| `rce-prices-mcp` | godzinowe.pl RCE prices with disk cache | `get_prices`, `get_current_price` | trader |
+| `rce-prices-mcp` | godzinowe.pl RCE prices with disk cache | `get_prices`, `get_current_price`, `plan_grid_charge` | trader |
 
 ```bash
 uv venv && uv pip install -e ".[solax,dev]"

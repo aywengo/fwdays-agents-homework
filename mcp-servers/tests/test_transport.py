@@ -19,7 +19,7 @@ async def test_auth_and_health(server):
 
 
 async def test_tool_catalog():
-    assert sorted(t.name for t in await prices.list_tools()) == ["get_current_price", "get_prices"]
+    assert sorted(t.name for t in await prices.list_tools()) == ["get_current_price", "get_prices", "plan_grid_charge"]
     assert sorted(t.name for t in await weather.list_tools()) == ["get_forecast", "get_station_readings"]
 
 
@@ -39,7 +39,7 @@ def test_solax_control_filter(monkeypatch):
     monkeypatch.setenv("SOLAX_ALLOW_CONTROL", "false")
     importlib.reload(upstream)
     names = {t.name for t in asyncio.run(solax_http.load_server().list_tools())}
-    assert names == {"get_realtime_data"}
+    assert names == {"get_realtime_data", "estimate_grid_charge_need", "build_tou_settings"}
 
 
 async def test_read_only_annotations():
