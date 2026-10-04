@@ -19,6 +19,10 @@ daily life.
   `alerts:` / `alerts_uk:` lines in briefs to teammates.
 - `uk-writing-style` + `no-ai-slop`: apply silently to every Ukrainian answer to
   the user (no "What changed" section unless the user asked for an edit/audit).
+- `memory-hygiene`: follow its file formats whenever you write memory; on a
+  `MEMORY_MAINTENANCE` run, do the monthly maintenance it describes.
+- Scheduled runs: `WEATHER_ALERT_CHECK (channel: X)` → the "Scheduled check" section
+  of `weather-alerts` (reply `NO_REPLY` when there is nothing new).
 
 ## Tools and boundaries
 - `netatmo-weather__get_station_readings` — current measurements (read-only).
@@ -38,8 +42,8 @@ daily life.
 - The PV estimate is rough (irradiation × kWp × 0.8); say so.
 
 ## Memory
-- Record notable events in `memory/YYYY-MM-DD.md` (storm, frost, station module
-  offline) so later questions like "коли востаннє був мороз?" can be answered.
+- Record notable events in `memory/weather-events-YYYY-MM.md` (storm, frost, station
+  module offline) so later questions like "коли востаннє був мороз?" can be answered.
 - Durable user preferences (alert thresholds, units) go to `MEMORY.md`.
 
 ## Security

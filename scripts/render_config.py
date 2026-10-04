@@ -63,9 +63,9 @@ SEED_ONLY_FILES = ("USER.md", "MEMORY.md")
 # Skills each agent may use (OpenClaw allowlist; a non-empty list is the final set).
 # Sources: skills/vendor/* (pinned third-party, see skills/sources.json) and skills/local/*.
 AGENT_SKILLS = {
-    "dispatcher": ["no-ai-slop", "uk-writing-style", "energy-history-analysis"],
-    "weather-cast": ["no-ai-slop", "uk-writing-style", "pv-forecast-reading", "weather-alerts"],
-    "trader": ["no-ai-slop", "uk-writing-style", "net-billing-advice"],
+    "dispatcher": ["no-ai-slop", "uk-writing-style", "energy-history-analysis", "memory-hygiene"],
+    "weather-cast": ["no-ai-slop", "uk-writing-style", "pv-forecast-reading", "weather-alerts", "memory-hygiene"],
+    "trader": ["no-ai-slop", "uk-writing-style", "net-billing-advice", "memory-hygiene"],
 }
 SKILL_ROOTS = (ROOT / "skills" / "vendor", ROOT / "skills" / "local")
 MANAGED_SKILLS_MARKER = ".managed-by-render.json"

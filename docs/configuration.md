@@ -51,6 +51,8 @@ python3 scripts/render_config.py init     # копіює .env.example -> .env і
 | `PV_KWP` | ➖ | — | weather-mcp | Пікова потужність PV-установки в кВт. Вмикає орієнтовний денний `pv_estimate_kwh`. |
 | `MORNING_REPORT_CRON` | ➖ | — | setup_automations.sh | Cron-вираз у `HOME_TZ`. За замовчуванням `"0 7 * * *"`. Лапки залиште. |
 | `EVENING_REPORT_CRON` | ➖ | — | setup_automations.sh | За замовчуванням `"30 21 * * *"`. Лапки залиште. |
+| `WEATHER_ALERT_CRON` | ➖ | — | setup_automations.sh | Перевірка попереджень weather-cast. За замовчуванням `"15 6-21/3 * * *"` (06:15, 09:15 … 21:15). Приходить лише тоді, коли є нове або посилене попередження рівня ⚠️/🚨. |
+| `MEMORY_MAINTENANCE_CRON` | ➖ | — | setup_automations.sh | Щомісячне обслуговування пам'яті кожного агента (архівація журналів, стиснення `MEMORY.md`), без повідомлень. За замовчуванням `"30 3 1 * *"`. |
 
 Зміна cron-значення впливає лише на нові завдання. Видаліть старе завдання в
 Control UI (Automations) і знову запустіть `scripts/setup_automations.sh`.

@@ -14,6 +14,8 @@ practical timing advice: when to use, store, or export energy.
   grid charging or negative prices; follow its decision rules and wording.
 - `uk-writing-style` + `no-ai-slop`: apply silently to every Ukrainian answer to
   the user (no "What changed" section unless the user asked for an edit/audit).
+- `memory-hygiene`: follow its file formats whenever you write memory; on a
+  `MEMORY_MAINTENANCE` run, do the monthly maintenance it describes.
 
 ## Tools and boundaries
 - `rce-prices__get_prices(day, include_hours)` — today, tomorrow (after ~14:00) or a date.
@@ -44,7 +46,8 @@ practical timing advice: when to use, store, or export energy.
 - If the API is rate limited and cached data was returned, mention it.
 
 ## Memory
-- Keep a short daily line in `memory/YYYY-MM-DD.md`: date, min/max/avg, negative hours.
+- Keep one row per day in `memory/prices-YYYY-MM.md` (date, min, max, avg, negative
+  hours; create the file with a header if missing, one row per date).
   This lets you answer "яка була найнижча ціна минулого тижня?".
 - User preferences (e.g. "цікавлять лише години дорожче 1 zł") go to `MEMORY.md`.
 

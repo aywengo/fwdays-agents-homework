@@ -39,6 +39,8 @@
 Відповідь «так» застосовує їх до інвертора ([деталі](docs/architecture.md#пропозиція-заряду-та-налаштування-tou)).
 **Вечірній звіт (21:30):** вироблено за день, імпорт/експорт, споживання за день,
 заряд батареї перед ніччю, прогноз і ціни на завтра.
+**Попередження (кожні 3 год):** weather-cast пише лише тоді, коли з'явилося нове або
+посилене попередження ⚠️/🚨 (вітер, злива, мороз, спека, сніг на панелях).
 
 ## Як виконано вимоги
 
@@ -49,7 +51,21 @@
 | 3 | Канал комунікації | **Discord** (окремий бот для кожного агента) і **WhatsApp** (диспетчер). Звіти доставляються автоматично за розкладом |
 | 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_spawn` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
 | 5 | Observability | OpenTelemetry → **Grafana LGTM** (Tempo, Prometheus, Loki) з готовим дашбордом: ходи агентів, tool calls (MCP), A2A-обмін, заблоковані виклики, помилки, токени. [docs/observability.md](docs/observability.md) |
-| + | Скіли | Кожен агент має свій allowlist скілів: зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і власні `uk-writing-style`, `pv-forecast-reading`, `net-billing-advice`, `energy-history-analysis`, `weather-alerts`. [docs/skills.md](docs/skills.md) |
+| + | Скіли | 7 скілів, кожен агент має свій allowlist (див. таблицю нижче): зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і 6 власних. [docs/skills.md](docs/skills.md) |
+
+## Скіли
+
+| Скіл | dispatcher | weather-cast | trader | Навіщо |
+| --- | :-: | :-: | :-: | --- |
+| [`no-ai-slop`](https://github.com/petergyang/no-ai-slop) (зовнішній) | ✅ | ✅ | ✅ | Текст без «AI-шаблонів» |
+| `uk-writing-style` | ✅ | ✅ | ✅ | Український стиль, глосарій, формат чисел |
+| `memory-hygiene` | ✅ | ✅ | ✅ | Формати пам'яті, щомісячна архівація без втрати даних |
+| `energy-history-analysis` | ✅ | | | Підсумки за тиждень/місяць, самодостатність, порівняння |
+| `pv-forecast-reading` | | ✅ | | Прогноз генерації PV |
+| `weather-alerts` | | ✅ | | Попередження ℹ️/⚠️/🚨, перевірка кожні 3 год |
+| `net-billing-advice` | | | ✅ | Поради щодо експорту, накопичення, заряду з мережі |
+
+Деталі, коли спрацьовує кожен скіл і як додати новий: [docs/skills.md](docs/skills.md).
 
 ## Архітектура
 
@@ -79,7 +95,7 @@ python3 scripts/netatmo_auth.py            # одноразова OAuth-авто
 python3 scripts/render_config.py render    # конфіг OpenClaw + workspace агентів у .local/
 docker compose up -d --build
 scripts/smoke_test.sh                      # перевірка без витрати токенів
-scripts/setup_automations.sh               # ранковий і вечірній звіти
+scripts/setup_automations.sh               # звіти, перевірка погоди, обслуговування пам'яті
 ```
 
 - Control UI: http://127.0.0.1:18789 · Grafana: http://127.0.0.1:3000

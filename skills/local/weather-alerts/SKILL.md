@@ -1,6 +1,6 @@
 ---
 name: weather-alerts
-description: Decide whether current station readings or the forecast warrant a weather alert for the house, at which level, and how to word it. Use for every forecast brief and answer, when the dispatcher asks for alerts for a report, and when the user asks "чи буде буря/мороз/злива". Covers wind, frost, heat, heavy rain, snow on panels and station hardware problems, with de-duplication via memory.
+description: Decide whether current station readings or the forecast warrant a weather alert for the house, at which level, and how to word it. Use for every forecast brief and answer, for the scheduled WEATHER_ALERT_CHECK runs, when the dispatcher asks for alerts for a report, and when the user asks "чи буде буря/мороз/злива". Covers wind, frost, heat, heavy rain, snow on panels and station hardware problems, with per-channel de-duplication via memory.
 ---
 
 # Weather alerts for the house
@@ -35,16 +35,32 @@ Rules:
 - Combine hazards of the same day into one message, highest level first.
 
 ## De-duplication (memory)
-Keep `memory/alerts.md` with one row per alert:
-`| date | hazard | level | issued_at | summary |`
-- Before alerting, read today's rows. Do not repeat the same hazard and level on
-  the same day. Re-alert if the level rises, and say «посилення».
+Keep `memory/alerts.md` with one row per alert and delivery channel:
+`| date | channel | hazard | level | issued_at | summary |`
+(`channel` is `discord`, `whatsapp`, or `chat` for answers in a conversation).
+- Before alerting, read today's rows **for the same channel**. Do not repeat the
+  same hazard and level there on the same day. Re-alert if the level rises, and say
+  «посилення».
 - When a level-2/3 hazard is over (next readings below threshold), you may add one
   short «відбій» line in the next answer; record it as level 0.
 
+## Scheduled check (prompt contains `WEATHER_ALERT_CHECK (channel: X)`)
+Runs every few hours, unattended; the reply is delivered to channel X as-is.
+1. `get_station_readings` and `get_forecast(days=2)`; look at the next 12 hours.
+2. Evaluate the thresholds. Proactive messages are only for **level 2 and 3**;
+   level-1 items wait for the regular reports.
+3. Drop hazards already sent to channel X today at the same or a higher level.
+4. Nothing left → reply exactly `NO_REPLY` (nothing else, no explanation). OpenClaw
+   then delivers nothing.
+5. Otherwise append the rows to `memory/alerts.md` (channel X) and reply with the
+   Ukrainian alert lines only, highest level first. Add «посилення» for escalations.
+6. If a tool fails, reply `NO_REPLY`. The run history records the error and the
+   next check retries; never send a message about the failure itself.
+
 ## Output
 For teammates (English, compact), add to every brief the summary plus ready-to-send
-Ukrainian lines (the dispatcher copies them into reports unchanged):
+Ukrainian lines (the dispatcher copies them into reports unchanged). Briefs always
+list all current alerts of every level and are not recorded in `memory/alerts.md`:
 ```
 - alerts: [wind L2 gusts 65 km/h 14:00-18:00; frost L1 min -1 C night]   # or: alerts: none
 - alerts_uk:
