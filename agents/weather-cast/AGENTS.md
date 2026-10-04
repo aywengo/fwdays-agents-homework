@@ -14,6 +14,9 @@ daily life.
 ## Skills
 - `pv-forecast-reading`: read it before every forecast answer or brief; use its
   labels and reply formats so reports stay consistent day to day.
+- `weather-alerts`: read it with every forecast answer or brief; evaluate the
+  thresholds, de-duplicate via `memory/alerts.md`, and always include the
+  `alerts:` / `alerts_uk:` lines in briefs to teammates.
 - `uk-writing-style` + `no-ai-slop`: apply silently to every Ukrainian answer to
   the user (no "What changed" section unless the user asked for an edit/audit).
 
@@ -30,8 +33,8 @@ daily life.
 - Lead with what affects PV: sunshine hours, irradiation (kWh/m²), cloud cover
   between 10:00 and 15:00, PV estimate. Then temperature range, rain, wind and gusts.
 - Compare forecast with the station when useful (e.g. "зараз 8.3 °C, вологість 86%").
-- Warn about: gusts ≥ 60 km/h, frost (≤ 0 °C), heavy rain (≥ 10 mm/day),
-  module battery < 20% or unreachable modules.
+- Warnings (wind, frost, heat, heavy rain, snow, station modules) follow the
+  `weather-alerts` skill: its thresholds, levels and wording.
 - The PV estimate is rough (irradiation × kWp × 0.8); say so.
 
 ## Memory

@@ -49,7 +49,7 @@
 | 3 | Канал комунікації | **Discord** (окремий бот для кожного агента) і **WhatsApp** (диспетчер). Звіти доставляються автоматично за розкладом |
 | 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_spawn` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
 | 5 | Observability | OpenTelemetry → **Grafana LGTM** (Tempo, Prometheus, Loki) з готовим дашбордом: ходи агентів, tool calls (MCP), A2A-обмін, заблоковані виклики, помилки, токени. [docs/observability.md](docs/observability.md) |
-| + | Скіли | Кожен агент має свій allowlist скілів: зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і власні `uk-writing-style`, `pv-forecast-reading`, `net-billing-advice`. [docs/skills.md](docs/skills.md) |
+| + | Скіли | Кожен агент має свій allowlist скілів: зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і власні `uk-writing-style`, `pv-forecast-reading`, `net-billing-advice`, `energy-history-analysis`, `weather-alerts`. [docs/skills.md](docs/skills.md) |
 
 ## Архітектура
 
@@ -101,6 +101,7 @@ scripts/setup_automations.sh               # ранковий і вечірні�
 4. **Звіт:** `docker compose exec openclaw openclaw automations run <job-id>` → звіт у Discord/WhatsApp; у Grafana трейс з викликами `solax-cloud__*`, `sessions_spawn`, `netatmo-weather__*`, `rce-prices__*`.
 5. **Пропозиція TOU:** після ранкового звіту з пропозицією відповісти `@Dispatcher так` (або «так» у WhatsApp) → dispatcher читає `memory/tou-proposal.md` і застосовує вікно заряду (потрібно `SOLAX_ALLOW_CONTROL=true`). Ввечері він запропонує повернути базові налаштування.
 6. **Зовнішній A2A:** `python3 scripts/a2a_client.py send "Підготуй короткий прогноз на завтра"`.
+7. **Історія:** `@Dispatcher скільки виробили за тиждень і яка самодостатність?` → підсумок з пам'яті за скілом `energy-history-analysis`. **Попередження:** `@WeatherCast чи буде сьогодні сильний вітер?` (скіл `weather-alerts`; ті ж рядки з'являються в звітах).
 
 ## Структура
 
