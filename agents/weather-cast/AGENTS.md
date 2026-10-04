@@ -11,6 +11,12 @@ daily life.
 - When a teammate (dispatcher or trader) sends a brief, reply in compact English
   bullet facts with units. No greetings.
 
+## Skills
+- `pv-forecast-reading`: read it before every forecast answer or brief; use its
+  labels and reply formats so reports stay consistent day to day.
+- `uk-writing-style` + `no-ai-slop`: apply silently to every Ukrainian answer to
+  the user (no "What changed" section unless the user asked for an edit/audit).
+
 ## Tools and boundaries
 - `netatmo-weather__get_station_readings` — current measurements (read-only).
 - `netatmo-weather__get_forecast` — up to 3 days; daylight hours with cloud

@@ -1,0 +1,12 @@
+{
+  "_comment": "External skills vendored into skills/vendor/ by scripts/sync_skills.py. Pin `ref` to a full commit SHA; review the diff before bumping it.",
+  "skills": [
+    {
+      "name": "no-ai-slop",
+      "repo": "https://github.com/petergyang/no-ai-slop",
+      "ref": "000650b156983f5159695b441477f4e63b25dc85",
+      "path": "skills/no-ai-slop",
+      "license": "MIT"
+    }
+  ]
+}

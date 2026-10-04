@@ -16,4 +16,8 @@ docs/architecture.md). When helping the operator set it up or change it:
   Keep `mcp<2` (FastMCP API; the upstream SolaX server depends on it).
 - Battery control (`set_battery_self_use_mode`) stays disabled unless the
   operator explicitly sets `SOLAX_ALLOW_CONTROL=true`.
+- Skills: third-party skills only via `skills/sources.json` pinned to a full
+  commit SHA, then `python3 scripts/sync_skills.py sync`; never edit
+  `skills/vendor/` by hand (CI runs `sync_skills.py verify`). Per-agent
+  assignment is `AGENT_SKILLS` in `scripts/render_config.py`. See docs/skills.md.
 - Verify with `scripts/smoke_test.sh` and `docker compose exec openclaw openclaw mcp probe`.

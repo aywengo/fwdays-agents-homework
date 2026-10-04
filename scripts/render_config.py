@@ -60,6 +60,15 @@ MCP_SERVERS = {
 MANAGED_FILES = ("AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md")
 # Files the agent owns after first seeding (persistent memory); never overwritten.
 SEED_ONLY_FILES = ("USER.md", "MEMORY.md")
+# Skills each agent may use (OpenClaw allowlist; a non-empty list is the final set).
+# Sources: skills/vendor/* (pinned third-party, see skills/sources.json) and skills/local/*.
+AGENT_SKILLS = {
+    "dispatcher": ["no-ai-slop", "uk-writing-style"],
+    "weather-cast": ["no-ai-slop", "uk-writing-style", "pv-forecast-reading"],
+    "trader": ["no-ai-slop", "uk-writing-style", "net-billing-advice"],
+}
+SKILL_ROOTS = (ROOT / "skills" / "vendor", ROOT / "skills" / "local")
+MANAGED_SKILLS_MARKER = ".managed-by-render.json"
 GENERATED_SECRETS = ("OPENCLAW_GATEWAY_TOKEN", "MCP_INTERNAL_TOKEN", "A2A_CLIENT_TOKEN", "GRAFANA_ADMIN_PASSWORD")
 
 
@@ -141,6 +150,7 @@ def agent_entries(env: dict[str, str]) -> dict:
             "agentDir": f"{C_STATE}/agents/{agent_id}/agent",
             "identity": {"name": meta["name"], "emoji": meta["emoji"], "theme": meta["theme"]},
             "groupChat": {"mentionPatterns": meta["mention"]},
+            "skills": list(AGENT_SKILLS.get(agent_id, [])),
             "tools": {"deny": deny},
         }
     return entries
@@ -326,6 +336,41 @@ def build_config(env: dict[str, str]) -> dict:
 
 
 # ------------------------------------------------------------------------- workspaces
+def skill_dirs() -> dict[str, Path]:
+    """Skill name -> directory, from the vendored and local roots (name = directory)."""
+    found: dict[str, Path] = {}
+    for root in SKILL_ROOTS:
+        for skill_md in sorted(root.glob("*/SKILL.md")):
+            name = skill_md.parent.name
+            if name in found:
+                raise SystemExit(f"Duplicate skill {name!r}: {found[name]} and {skill_md.parent}")
+            found[name] = skill_md.parent
+    return found
+
+
+def install_skills(agent_id: str, workspace: Path) -> None:
+    """Copy the agent's allowlisted skills into <workspace>/skills (OpenClaw's
+    highest-precedence skill root, readable with the workspace-only `read` tool).
+    Only skills previously installed by this script are removed or replaced."""
+    available = skill_dirs()
+    wanted = AGENT_SKILLS.get(agent_id, [])
+    missing = [name for name in wanted if name not in available]
+    if missing:
+        raise SystemExit(f"{agent_id}: unknown skills {missing}; run scripts/sync_skills.py sync")
+    target = workspace / "skills"
+    target.mkdir(parents=True, exist_ok=True)
+    marker = target / MANAGED_SKILLS_MARKER
+    previous = json.loads(marker.read_text()) if marker.exists() else []
+    for name in previous:
+        shutil.rmtree(target / name, ignore_errors=True)
+    for name in wanted:
+        if (target / name).exists():
+            raise SystemExit(f"{target / name} exists but was not installed by render; "
+                             "remove it or give your own skill another name")
+        shutil.copytree(available[name], target / name)
+    marker.write_text(json.dumps(wanted) + "\n")
+
+
 def seed_workspaces() -> None:
     for agent_id in AGENTS:
         src, dst = ROOT / "agents" / agent_id, WORKSPACES / agent_id
@@ -336,6 +381,7 @@ def seed_workspaces() -> None:
         for name in SEED_ONLY_FILES:
             if (src / name).exists() and not (dst / name).exists():
                 shutil.copyfile(src / name, dst / name)
+        install_skills(agent_id, dst)
 
 
 def write_config(config: dict, path: Path) -> None:
@@ -348,9 +394,11 @@ def write_config(config: dict, path: Path) -> None:
 
 def describe(config: dict) -> str:
     ch = config["channels"]
+    skills = "; ".join(f"{a}:{'+'.join(s['skills'])}" for a, s in config["agents"]["entries"].items())
     return (f"model={config['agents']['defaults']['model']['primary']} "
             f"agents={','.join(config['agents']['entries'])} "
             f"channels={','.join(ch)} "
+            f"skills=[{skills}] "
             f"solax_control={'on' if 'toolFilter' not in config['mcp']['servers']['solax-cloud'] else 'off'}")
 
 

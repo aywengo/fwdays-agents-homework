@@ -1,0 +1,18 @@
+{
+  "skills": [
+    {
+      "name": "no-ai-slop",
+      "repo": "https://github.com/petergyang/no-ai-slop",
+      "ref": "000650b156983f5159695b441477f4e63b25dc85",
+      "path": "skills/no-ai-slop",
+      "license": "MIT",
+      "files": {
+        "LICENSE": "b7a7fe370cc4c9e974528c7cea7841cf8ac886bc9ed947edb11b289441fba4a8",
+        "SKILL.md": "992b365f51a2f62cf4c1c5ed22049a9ee551dfea677550c1a72b371c0ceadd62",
+        "SOURCE.md": "eb2755c540887ecfe372615c01a59f78371df953c4f51e894156f731b1d99e2f",
+        "agents/openai.yaml": "51aa33afd4a3287a618c681212a86ce01cc7da4d9c37e54e65166acffa24519a",
+        "eval.md": "8ad8d83ed1abe7fc054ad74966bfca64fc182bc71f59d701b24b962c39d11ad7"
+      }
+    }
+  ]
+}

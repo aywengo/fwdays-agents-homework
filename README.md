@@ -49,6 +49,7 @@
 | 3 | Канал комунікації | **Discord** (окремий бот для кожного агента) і **WhatsApp** (диспетчер). Звіти доставляються автоматично за розкладом |
 | 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_spawn` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
 | 5 | Observability | OpenTelemetry → **Grafana LGTM** (Tempo, Prometheus, Loki) з готовим дашбордом: ходи агентів, tool calls (MCP), A2A-обмін, заблоковані виклики, помилки, токени. [docs/observability.md](docs/observability.md) |
+| + | Скіли | Кожен агент має свій allowlist скілів: зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і власні `uk-writing-style`, `pv-forecast-reading`, `net-billing-advice`. [docs/skills.md](docs/skills.md) |
 
 ## Архітектура
 
@@ -105,10 +106,11 @@ scripts/setup_automations.sh               # ранковий і вечірні�
 
 ```
 agents/            інструкції агентів (AGENTS.md, SOUL.md, IDENTITY.md, TOOLS.md, шаблони пам'яті)
+skills/            скіли: vendor/ (зовнішні, зафіксовані) і local/ (власні)
 mcp-servers/       MCP: SolaX (обгортка над upstream), Netatmo+Open-Meteo, ціни RCE; тести
-scripts/           render_config.py, netatmo_auth.py, setup_automations.sh, a2a_client.py, smoke_test.sh, check_secrets.py
+scripts/           render_config.py, sync_skills.py, netatmo_auth.py, setup_automations.sh, a2a_client.py, smoke_test.sh, check_secrets.py
 observability/     дашборд Grafana
-docs/              архітектура, встановлення, змінні середовища, observability, безпека
+docs/              архітектура, встановлення, змінні середовища, скіли, observability, безпека
 docker-compose.yml
 ```
 
@@ -119,4 +121,5 @@ docker-compose.yml
 - [Данило Топчій](https://github.com/danil-topchiy) та колективу [FwDays](https://fwdays.com) за [Воркшоп: Агентні системи](https://fwdays.com/event/agentic-system-workshop)
 - Налаштування курсу [danil-topchiy/agents-setup](https://github.com/danil-topchiy/agents-setup) — основа для OpenClaw-конфігурації та Discord-команди.
 - [mouldiwarp/solax-cloud-mcp](https://github.com/mouldiwarp/solax-cloud-mcp) — MCP для SolaX Cloud.
+- [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop) — скіл для тексту без AI-шаблонів (MIT).
 - [godzinowe.pl](https://godzinowe.pl) — безкоштовне API цін RCE для приватного використання.
