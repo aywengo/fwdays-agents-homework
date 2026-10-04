@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: MCP server tests
+        working-directory: mcp-servers
+        run: |
+          uv venv && uv pip install -e ".[solax,dev]"
+          uv run pytest -q
+      - name: Render OpenClaw config (no secrets)
+        run: |
+          python3 scripts/render_config.py check
+          cp .env.example .env && python3 scripts/render_config.py init && python3 scripts/render_config.py render
+          python3 -c "import json;json.load(open('.local/openclaw/openclaw.json'))"
+          python3 -c "import json;json.load(open('observability/grafana/dashboards/home-energy-agents.json'))"
+      - name: Secret scan
+        run: python3 scripts/check_secrets.py
+      - name: Compose file
+        run: cp .env.example .env.ci && docker compose --env-file .env.ci config -q || true

@@ -1,0 +1,17 @@
+# Secrets and private runtime state
+.env
+.env.*
+!.env.example
+.local/
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "home-mcp"
+version = "0.1.0"
+description = "MCP servers for the home energy agent team: Netatmo weather, RCE prices, SolaX HTTP wrapper"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    # FastMCP was renamed in mcp 2.x; the SolaX server and this package use the 1.x API.
+    "mcp[cli]>=1.13,<2",
+    "httpx>=0.27",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+solax = [
+    # Pinned upstream commit of https://github.com/mouldiwarp/solax-cloud-mcp
+    "solax-cloud-mcp @ git+https://github.com/mouldiwarp/solax-cloud-mcp@051b425efc1ecc526328e775b9ade9f0f6baba40",
+]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "respx>=0.21"]
+
+[project.scripts]
+netatmo-weather-mcp = "home_mcp.weather_server:main"
+rce-prices-mcp = "home_mcp.prices_server:main"
+solax-http-mcp = "home_mcp.solax_http:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/home_mcp"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]

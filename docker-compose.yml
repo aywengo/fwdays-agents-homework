@@ -1,0 +1,138 @@
+# Home energy agent team: OpenClaw + 3 MCP servers + Grafana LGTM (traces, metrics, logs).
+# Secrets come from the ignored .env; each container receives only the variables it needs.
+# Prepare first:  python3 scripts/render_config.py init && python3 scripts/render_config.py render
+
+x-mcp: &mcp
+  build: ./mcp-servers
+  image: home-energy-mcp:local
+  restart: unless-stopped
+  networks: [backend]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+
+x-openclaw: &openclaw
+  image: ghcr.io/openclaw/openclaw:${OPENCLAW_IMAGE_TAG:-2026.9.6-browser}
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  init: true
+  environment:
+    HOME: /home/node
+    OPENCLAW_HOME: /home/node
+    OPENCLAW_STATE_DIR: /home/node/.openclaw
+    OPENCLAW_CONFIG_PATH: /home/node/config/openclaw.json
+    XDG_CACHE_HOME: /home/node/.openclaw/cache
+    TZ: ${HOME_TZ:-Europe/Warsaw}
+    OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?run scripts/render_config.py init}
+    MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:?run scripts/render_config.py init}
+    A2A_CLIENT_TOKEN: ${A2A_CLIENT_TOKEN:?run scripts/render_config.py init}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    DISCORD_DISPATCHER_BOT_TOKEN: ${DISCORD_DISPATCHER_BOT_TOKEN:-}
+    DISCORD_WEATHER_BOT_TOKEN: ${DISCORD_WEATHER_BOT_TOKEN:-}
+    DISCORD_TRADER_BOT_TOKEN: ${DISCORD_TRADER_BOT_TOKEN:-}
+  volumes:
+    - openclaw-state:/home/node/.openclaw
+    - ./.local/openclaw:/home/node/config
+    - ./.local/workspaces:/home/node/workspaces
+
+services:
+  # One-shot: installs the external OpenClaw plugins (pinned) into the state volume.
+  openclaw-init:
+    <<: *openclaw
+    restart: "no"
+    networks: [egress]
+    entrypoint: ["sh", "/opt/scripts/install_plugins.sh"]
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+      - ./.local/openclaw:/home/node/config
+      - ./.local/workspaces:/home/node/workspaces
+      - ./scripts/install_plugins.sh:/opt/scripts/install_plugins.sh:ro
+
+  openclaw:
+    <<: *openclaw
+    restart: unless-stopped
+    depends_on:
+      openclaw-init: {condition: service_completed_successfully}
+      solax-mcp: {condition: service_healthy}
+      weather-mcp: {condition: service_healthy}
+      prices-mcp: {condition: service_healthy}
+      lgtm: {condition: service_started}
+    networks: [backend, egress]
+    ports:
+      - "127.0.0.1:18789:18789"   # Control UI + A2A endpoint, localhost only
+    shm_size: 1gb
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    command: [openclaw, gateway, --bind, lan, --port, "18789"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  solax-mcp:
+    <<: *mcp
+    command: ["solax-http-mcp"]
+    networks: [backend, egress]
+    environment:
+      MCP_AUTH_TOKEN: ${MCP_INTERNAL_TOKEN}
+      SOLAX_CLIENT_ID: ${SOLAX_CLIENT_ID:?set SOLAX_CLIENT_ID in .env}
+      SOLAX_CLIENT_SECRET: ${SOLAX_CLIENT_SECRET:?set SOLAX_CLIENT_SECRET in .env}
+      SOLAX_DEVICE_SN: ${SOLAX_DEVICE_SN:?set SOLAX_DEVICE_SN in .env}
+      SOLAX_ALLOW_CONTROL: ${SOLAX_ALLOW_CONTROL:-false}
+
+  weather-mcp:
+    <<: *mcp
+    command: ["netatmo-weather-mcp"]
+    networks: [backend, egress]
+    environment:
+      MCP_AUTH_TOKEN: ${MCP_INTERNAL_TOKEN}
+      NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}
+      NETATMO_CLIENT_SECRET: ${NETATMO_CLIENT_SECRET:-}
+      NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
+      NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
+      HOME_LAT: ${HOME_LAT:-}
+      HOME_LON: ${HOME_LON:-}
+      HOME_TZ: ${HOME_TZ:-Europe/Warsaw}
+      PV_KWP: ${PV_KWP:-}
+    volumes:
+      - weather-state:/data   # rotated Netatmo refresh token
+
+  prices-mcp:
+    <<: *mcp
+    command: ["rce-prices-mcp"]
+    networks: [backend, egress]
+    environment:
+      MCP_AUTH_TOKEN: ${MCP_INTERNAL_TOKEN}
+      HOME_TZ: ${HOME_TZ:-Europe/Warsaw}
+    volumes:
+      - prices-state:/data    # per-day price cache
+
+  lgtm:
+    image: grafana/otel-lgtm:${LGTM_IMAGE_TAG:-0.35.0}
+    restart: unless-stopped
+    networks: [backend, egress]   # egress only so the host port can be published
+    ports:
+      - "127.0.0.1:3000:3000"  # Grafana, localhost only
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run scripts/render_config.py init}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /otel-lgtm/grafana/conf/provisioning/dashboards/custom/home-energy-agents.json
+    volumes:
+      - lgtm-data:/data
+      - ./observability/grafana/dashboards/home-energy-agents.json:/otel-lgtm/grafana/conf/provisioning/dashboards/custom/home-energy-agents.json:ro
+      - ./observability/grafana/provisioning/dashboards/custom.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/custom.yaml:ro
+
+networks:
+  backend:
+    internal: true   # OpenClaw <-> MCP <-> telemetry; no internet on this network
+  egress: {}         # internet access for OpenClaw (model, Discord, WhatsApp) and MCP upstream APIs
+
+volumes:
+  openclaw-state:
+  weather-state:
+  prices-state:
+  lgtm-data:
