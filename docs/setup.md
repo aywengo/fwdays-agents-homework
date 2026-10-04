@@ -15,6 +15,7 @@ python3 scripts/render_config.py render   # -> .local/openclaw/openclaw.json + .
 
 `render` is safe to re-run after every `.env` or `agents/*.md` change; it keeps
 agent memory. Set `HOST_UID`/`HOST_GID` to `id -u`/`id -g` on Linux.
+Every variable is described in [configuration.md](configuration.md).
 
 ## 2. Start
 

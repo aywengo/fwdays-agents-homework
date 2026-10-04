@@ -80,6 +80,7 @@ scripts/setup_automations.sh               # ранковий і вечірні�
 
 - Control UI: http://127.0.0.1:18789 · Grafana: http://127.0.0.1:3000
 - Повна інструкція (англ.): [docs/setup.md](docs/setup.md)
+- Усі змінні середовища, включно із секретами (англ.): [docs/configuration.md](docs/configuration.md)
 
 ## Секрети
 
@@ -103,7 +104,7 @@ agents/            інструкції агентів (AGENTS.md, SOUL.md, IDEN
 mcp-servers/       MCP: SolaX (обгортка над upstream), Netatmo+Open-Meteo, ціни RCE; тести
 scripts/           render_config.py, netatmo_auth.py, setup_automations.sh, a2a_client.py, smoke_test.sh, check_secrets.py
 observability/     дашборд Grafana
-docs/              архітектура, встановлення, observability, безпека (англ.)
+docs/              архітектура, встановлення, змінні середовища, observability, безпека (англ.)
 docker-compose.yml
 ```
 

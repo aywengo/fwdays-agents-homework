@@ -43,6 +43,20 @@ services:
     restart: "no"
     networks: [egress]
     entrypoint: ["sh", "/opt/scripts/install_plugins.sh"]
+    environment:
+      HOME: /home/node
+      OPENCLAW_HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/config/openclaw.json
+      XDG_CACHE_HOME: /home/node/.openclaw/cache
+      OPENCLAW_PLUGIN_VERSION: ${OPENCLAW_PLUGIN_VERSION:-2026.9.6}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?run scripts/render_config.py init}
+      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:?run scripts/render_config.py init}
+      A2A_CLIENT_TOKEN: ${A2A_CLIENT_TOKEN:?run scripts/render_config.py init}
+      # Referenced by the rendered config; `openclaw config validate` resolves them.
+      DISCORD_DISPATCHER_BOT_TOKEN: ${DISCORD_DISPATCHER_BOT_TOKEN:-}
+      DISCORD_WEATHER_BOT_TOKEN: ${DISCORD_WEATHER_BOT_TOKEN:-}
+      DISCORD_TRADER_BOT_TOKEN: ${DISCORD_TRADER_BOT_TOKEN:-}
     volumes:
       - openclaw-state:/home/node/.openclaw
       - ./.local/openclaw:/home/node/config
