@@ -41,7 +41,7 @@
 
 | # | Вимога | Реалізація |
 | --- | --- | --- |
-| 1 | Агенти з різними ролями та межами доступу, модель, MCP | 3 агенти OpenClaw з окремими workspace та інструкціями ([agents/](agents/)). Модель — Anthropic (налаштовується). 3 MCP-сервери ([mcp-servers/](mcp-servers/)). Кожен агент бачить **лише свій** MCP (deny `server__*`), shell/web/браузер заборонені, керування батареєю вимкнене за замовчуванням і потребує підтвердження. Деталі: [docs/architecture.md](docs/architecture.md#agents-and-access-boundaries) |
+| 1 | Агенти з різними ролями та межами доступу, модель, MCP | 3 агенти OpenClaw з окремими workspace та інструкціями ([agents/](agents/)). Модель — Anthropic (налаштовується). 3 MCP-сервери ([mcp-servers/](mcp-servers/)). Кожен агент бачить **лише свій** MCP (deny `server__*`), shell/web/браузер заборонені, керування батареєю вимкнене за замовчуванням і потребує підтвердження. Деталі: [docs/architecture.md](docs/architecture.md#агенти-та-межі-доступу) |
 | 2 | Persistent memory | Markdown-пам'ять OpenClaw (`MEMORY.md`, `memory/*.md`) у `.local/workspaces`, переживає перезапуск. Ранковий звіт рахує нічне споживання з **вечірнього знімка, збереженого в попередньому запуску**; «запам'ятай…» зберігає вподобання |
 | 3 | Канал комунікації | **Discord** (окремий бот для кожного агента) і **WhatsApp** (диспетчер). Звіти доставляються автоматично за розкладом |
 | 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_spawn` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
@@ -79,8 +79,8 @@ scripts/setup_automations.sh               # ранковий і вечірні�
 ```
 
 - Control UI: http://127.0.0.1:18789 · Grafana: http://127.0.0.1:3000
-- Повна інструкція (англ.): [docs/setup.md](docs/setup.md)
-- Усі змінні середовища, включно із секретами (англ.): [docs/configuration.md](docs/configuration.md)
+- Повна інструкція: [docs/setup.md](docs/setup.md)
+- Усі змінні середовища, включно із секретами: [docs/configuration.md](docs/configuration.md)
 
 ## Секрети
 
@@ -104,11 +104,11 @@ agents/            інструкції агентів (AGENTS.md, SOUL.md, IDEN
 mcp-servers/       MCP: SolaX (обгортка над upstream), Netatmo+Open-Meteo, ціни RCE; тести
 scripts/           render_config.py, netatmo_auth.py, setup_automations.sh, a2a_client.py, smoke_test.sh, check_secrets.py
 observability/     дашборд Grafana
-docs/              архітектура, встановлення, змінні середовища, observability, безпека (англ.)
+docs/              архітектура, встановлення, змінні середовища, observability, безпека
 docker-compose.yml
 ```
 
-Документація англійською, спілкування агентів з користувачем — українською.
+Документація — українською (команди, назви змінних і коду — англійською). Інструкції агентів (`agents/`) — англійською, спілкування агентів з користувачем — українською.
 
 ## Подяки
 

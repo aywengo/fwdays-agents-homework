@@ -1,90 +1,93 @@
-# Setup
+# Встановлення
 
-Requirements: Docker with Compose v2, Python 3.11+ on the host (for the helper
-scripts), a model provider account (Anthropic by default), SolaX Developer
-Platform app, Netatmo app. Discord and WhatsApp are optional.
+Вимоги: Docker з Compose v2, Python 3.11+ на хості (для допоміжних скриптів),
+обліковий запис постачальника моделі (за замовчуванням Anthropic), застосунок у
+SolaX Developer Platform, застосунок Netatmo. Discord і WhatsApp — за бажанням.
 
-## 1. Secrets and config
+## 1. Секрети та конфігурація
 
 ```bash
-python3 scripts/render_config.py init     # creates .env (0600) with generated internal tokens
-$EDITOR .env                              # fill SolaX, Netatmo, model, Discord/WhatsApp values
-python3 scripts/netatmo_auth.py           # one-time browser consent -> NETATMO_REFRESH_TOKEN
+python3 scripts/render_config.py init     # створює .env (0600) зі згенерованими внутрішніми токенами
+$EDITOR .env                              # заповніть SolaX, Netatmo, модель, Discord/WhatsApp
+python3 scripts/netatmo_auth.py           # одноразова згода в браузері -> NETATMO_REFRESH_TOKEN
 python3 scripts/render_config.py render   # -> .local/openclaw/openclaw.json + .local/workspaces/*
 ```
 
-`render` is safe to re-run after every `.env` or `agents/*.md` change; it keeps
-agent memory. Set `HOST_UID`/`HOST_GID` to `id -u`/`id -g` on Linux.
-Every variable is described in [configuration.md](configuration.md).
+`render` можна безпечно запускати повторно після кожної зміни `.env` чи
+`agents/*.md`; пам'ять агентів зберігається. На Linux встановіть
+`HOST_UID`/`HOST_GID` у значення `id -u`/`id -g`.
+Кожну змінну описано в [configuration.md](configuration.md).
 
-## 2. Start
+## 2. Запуск
 
 ```bash
 docker compose up -d --build
-docker compose logs -f openclaw-init   # installs discord/whatsapp/diagnostics-otel plugins (pinned)
-scripts/smoke_test.sh                  # health, A2A auth, config, MCP probe, Grafana
+docker compose logs -f openclaw-init   # встановлює плагіни discord/whatsapp/diagnostics-otel (зафіксовані версії)
+scripts/smoke_test.sh                  # health, автентифікація A2A, конфіг, MCP probe, Grafana
 ```
 
-If you did not set an API key, log in to the model provider once:
+Якщо ви не вказали API-ключ, один раз увійдіть до постачальника моделі:
 
 ```bash
 docker compose exec openclaw openclaw models auth login --provider anthropic
 ```
 
-Control UI: http://127.0.0.1:18789 (gateway token from `.env`). Grafana:
+Control UI: http://127.0.0.1:18789 (gateway-токен з `.env`). Grafana:
 http://127.0.0.1:3000 (`admin` / `GRAFANA_ADMIN_PASSWORD`).
 
-## 3. Channels
+## 3. Канали
 
-### Discord (one bot per agent)
-1. Create three applications in the Discord Developer Portal (Dispatcher,
-   WeatherCast, Trader), enable the **Message Content** intent, invite each bot to
-   your server with Send Messages / Read Message History.
-2. Enable Developer Mode, copy the server ID, your user ID, a team channel ID and
-   a reports channel ID (can be the same), each bot's application ID and bot user ID.
-3. Put tokens and IDs in `.env` (`DISCORD_*`). Only the dispatcher bot is required;
-   bots without a token are skipped.
+### Discord (окремий бот для кожного агента)
+1. Створіть три застосунки в Discord Developer Portal (Dispatcher, WeatherCast,
+   Trader), увімкніть intent **Message Content**, запросіть кожного бота на свій
+   сервер з правами Send Messages / Read Message History.
+2. Увімкніть Developer Mode і скопіюйте ID сервера, свій user ID, ID командного
+   каналу та каналу для звітів (може бути той самий), а також application ID і
+   bot user ID кожного бота.
+3. Внесіть токени та ID у `.env` (`DISCORD_*`). Обов'язковий лише бот
+   dispatcher-а; боти без токена пропускаються.
 4. `python3 scripts/render_config.py render && docker compose up -d openclaw`.
-5. DM a bot or @mention it in the team channel. Each bot answers without a mention
-   in its own optional room (`DISCORD_<ROLE>_CHANNEL_ID`).
+5. Напишіть боту в DM або @згадайте його в командному каналі. Кожен бот відповідає
+   без згадки у своїй (необов'язковій) кімнаті (`DISCORD_<ROLE>_CHANNEL_ID`).
 
 ### WhatsApp (dispatcher)
-1. Set `WHATSAPP_ENABLED=true`, `WHATSAPP_ALLOW_FROM=+48…` (and
-   `WHATSAPP_REPORT_TO` for reports), then render and restart.
-2. Link the account by QR (a dedicated number is recommended):
+1. Встановіть `WHATSAPP_ENABLED=true`, `WHATSAPP_ALLOW_FROM=+48…` (та
+   `WHATSAPP_REPORT_TO` для звітів), потім виконайте render і перезапуск.
+2. Під'єднайте обліковий запис через QR-код (рекомендовано окремий номер):
    `docker compose exec -it openclaw openclaw channels login --channel whatsapp`
 
-## 4. Scheduled reports
+## 4. Заплановані звіти
 
 ```bash
-scripts/setup_automations.sh          # creates morning + evening jobs per report channel
+scripts/setup_automations.sh          # створює ранкове та вечірнє завдання для кожного каналу звітів
 scripts/setup_automations.sh --list
-docker compose exec openclaw openclaw automations run <job-id>   # test now
+docker compose exec openclaw openclaw automations run <job-id>   # перевірити зараз
 ```
 
-The first morning report has no previous evening snapshot; overnight figures
-appear from the second day.
+Перший ранковий звіт не має попереднього вечірнього знімка; нічні показники
+з'являються з другого дня.
 
-## 5. A2A from outside
+## 5. A2A ззовні
 
 ```bash
 python3 scripts/a2a_client.py card
 python3 scripts/a2a_client.py send "Який зараз заряд батареї і чи варто ввечері економити?"
 ```
 
-## Native (without Docker)
+## Без Docker (нативно)
 
-The MCP servers also run over stdio (`MCP_TRANSPORT=stdio rce-prices-mcp`). If
-you run them over HTTP on the same host, use `http://127.0.0.1:<port>/mcp` or a
-`*.localhost` name in `mcp.servers`: OpenClaw's SSRF guard trusts the exact
-configured origin, but blocks a custom hostname that resolves to loopback.
+MCP-сервери також працюють через stdio (`MCP_TRANSPORT=stdio rce-prices-mcp`).
+Якщо запускаєте їх через HTTP на тому ж хості, використовуйте
+`http://127.0.0.1:<port>/mcp` або ім'я `*.localhost` у `mcp.servers`: SSRF-захист
+OpenClaw довіряє точно налаштованому origin, але блокує довільне ім'я хоста, яке
+резолвиться в loopback.
 
-## Troubleshooting
+## Усунення несправностей
 
-| Symptom | Check |
+| Симптом | Що перевірити |
 | --- | --- |
-| `openclaw mcp probe` fails | `docker compose ps` health of `*-mcp`; same `MCP_INTERNAL_TOKEN` in both places (re-render + restart) |
-| `mcp doctor` warns about a literal Authorization header | Expected: headers are strings; the value is `${MCP_INTERNAL_TOKEN}`, resolved from the container env |
-| Netatmo `token refresh failed` | Re-run `scripts/netatmo_auth.py`, then `docker compose rm -sf weather-mcp && docker volume rm <project>_weather-state && docker compose up -d weather-mcp` |
-| Prices `rate limit` | Wait a few minutes; cached days are still served |
-| Report not delivered | `openclaw automations runs <job-id>`; Discord bot must see the reports channel |
+| `openclaw mcp probe` не проходить | health контейнерів `*-mcp` у `docker compose ps`; однаковий `MCP_INTERNAL_TOKEN` з обох боків (render + перезапуск) |
+| `mcp doctor` попереджає про literal-заголовок Authorization | Очікувано: заголовки — це рядки; значення `${MCP_INTERNAL_TOKEN}` підставляється зі змінних середовища контейнера |
+| Netatmo `token refresh failed` | Повторіть `scripts/netatmo_auth.py`, потім `docker compose rm -sf weather-mcp && docker volume rm <project>_weather-state && docker compose up -d weather-mcp` |
+| Prices `rate limit` | Зачекайте кілька хвилин; закешовані дні все одно віддаються |
+| Звіт не доставлено | `openclaw automations runs <job-id>`; бот Discord має бачити канал звітів |

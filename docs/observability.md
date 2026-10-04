@@ -1,20 +1,20 @@
 # Observability
 
-OpenClaw's `diagnostics-otel` plugin exports **traces, metrics and logs** over
-OTLP/HTTP to the `grafana/otel-lgtm` container (OpenTelemetry Collector + Tempo +
-Prometheus + Loki + Grafana). The dashboard **Home energy agents** is provisioned
-as Grafana's home page: http://127.0.0.1:3000.
+Плагін OpenClaw `diagnostics-otel` експортує **трейси, метрики та логи** через
+OTLP/HTTP у контейнер `grafana/otel-lgtm` (OpenTelemetry Collector + Tempo +
+Prometheus + Loki + Grafana). Дашборд **Home energy agents** підключено як
+домашню сторінку Grafana: http://127.0.0.1:3000.
 
-| Panel group | Source | Shows |
+| Група панелей | Джерело | Що показує |
 | --- | --- | --- |
-| Overview | Prometheus | agent turns, tool calls, blocked tool calls, tokens (last hour) |
-| Agents and A2A | Prometheus | turns by agent and trigger (user / cron / agent handoff), `sessions_*` handoff rate, messages by channel incl. `a2a` |
-| Tools and MCP | Prometheus | calls and p95 latency per tool (`solax-cloud__*`, `netatmo-weather__*`, `rce-prices__*`), errors by category, calls blocked by policy |
-| Model | Prometheus | run duration, tokens by agent, estimated cost |
-| Traces | Tempo (TraceQL) | recent runs, error spans, MCP tool calls, A2A handoffs and A2A channel traffic |
-| Logs | Loki | gateway warnings and errors, correlated with traces by `traceId` |
+| Overview | Prometheus | ходи агентів, виклики інструментів, заблоковані виклики, токени (за останню годину) |
+| Agents and A2A | Prometheus | ходи за агентом і тригером (користувач / cron / передача між агентами), частота передач `sessions_*`, повідомлення за каналами, включно з `a2a` |
+| Tools and MCP | Prometheus | виклики та p95-затримка для кожного інструмента (`solax-cloud__*`, `netatmo-weather__*`, `rce-prices__*`), помилки за категоріями, виклики, заблоковані політикою |
+| Model | Prometheus | тривалість запусків, токени за агентом, орієнтовна вартість |
+| Traces | Tempo (TraceQL) | останні запуски, спани з помилками, виклики MCP-інструментів, передачі A2A та трафік каналу A2A |
+| Logs | Loki | попередження та помилки gateway, пов'язані з трейсами через `traceId` |
 
-Useful TraceQL queries in **Explore → Tempo**:
+Корисні TraceQL-запити в **Explore → Tempo**:
 
 ```
 {resource.service.name="home-energy-agents" && name="openclaw.run"}
@@ -23,10 +23,11 @@ Useful TraceQL queries in **Explore → Tempo**:
 {name="openclaw.tool.execution" && span.openclaw.outcome="blocked"}
 ```
 
-Span catalogue: `openclaw.run` → `openclaw.model.call` / `openclaw.tool.execution`
-(tool name, source, outcome, error category, denial reason) /
+Каталог спанів: `openclaw.run` → `openclaw.model.call` / `openclaw.tool.execution`
+(назва інструмента, джерело, результат, категорія помилки, причина відмови) /
 `openclaw.message.processed` / `openclaw.message.delivery`.
 
-Privacy: prompt and tool content is **not** exported unless
-`OTEL_CAPTURE_CONTENT=true`. The OpenClaw Control UI (Sessions, Automations →
-run history) is the second, content-level view of what each agent did.
+Приватність: вміст промптів та інструментів **не** експортується, якщо не
+встановлено `OTEL_CAPTURE_CONTENT=true`. Control UI OpenClaw (Sessions,
+Automations → історія запусків) — другий погляд на те, що робив кожен агент,
+уже на рівні вмісту.
