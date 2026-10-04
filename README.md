@@ -116,6 +116,7 @@ docker-compose.yml
 
 ## Подяки
 
+- [Данило Топчій](https://github.com/danil-topchiy) та колективу [FwDays](https://fwdays.com) за [Воркшоп: Агентні системи](https://fwdays.com/event/agentic-system-workshop)
 - Налаштування курсу [danil-topchiy/agents-setup](https://github.com/danil-topchiy/agents-setup) — основа для OpenClaw-конфігурації та Discord-команди.
 - [mouldiwarp/solax-cloud-mcp](https://github.com/mouldiwarp/solax-cloud-mcp) — MCP для SolaX Cloud.
 - [godzinowe.pl](https://godzinowe.pl) — безкоштовне API цін RCE для приватного використання.
