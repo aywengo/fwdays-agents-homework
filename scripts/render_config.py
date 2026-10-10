@@ -118,11 +118,14 @@ def tool_policy(env: dict[str, str]) -> dict:
         "profile": "minimal",
         "alsoAllow": [
             "read", "write", "group:memory", "bundle-mcp",
-            "sessions_spawn", "sessions_yield", "sessions_send", "sessions_list",
-            "sessions_history", "subagents",
+            # Teammates are reached with sessions_send: the target runs in its own
+            # session with its own tools. Spawned sub-agents would inherit the
+            # caller's policy (no foreign MCP tools), so spawning is not granted.
+            "sessions_send", "sessions_list", "sessions_history",
         ],
         "deny": [
             "exec", "process", "code_execution", "edit", "apply_patch",
+            "sessions_spawn", "sessions_yield", "subagents",
             "group:web", "group:ui", "group:nodes", "group:automation", "group:messaging",
             "group:media",
         ],
@@ -141,9 +144,6 @@ def agent_entries(env: dict[str, str]) -> dict:
     for agent_id, meta in AGENTS.items():
         foreign = [f"{name}__*" for name in MCP_SERVERS if name != meta["own_mcp"]]
         deny = list(foreign)
-        if agent_id != "dispatcher":
-            # Specialists answer; only the dispatcher orchestrates sub-agents.
-            deny += ["sessions_spawn", "subagents"]
         entries[agent_id] = {
             "name": meta["name"],
             "workspace": f"{C_WORKSPACES}/{agent_id}",

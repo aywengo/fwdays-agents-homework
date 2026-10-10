@@ -11,16 +11,21 @@
 # battery control (set_battery_self_use_mode) is never included.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; . ./.env; set +a
+# Load .env as data (not as shell code): values such as OAuth tokens may contain |, & or $.
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+  key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+  if [[ "$val" =~ ^\'(.*)\'$ || "$val" =~ ^\"(.*)\"$ ]]; then val="${BASH_REMATCH[1]}"; fi
+  export "$key=$val"
+done < .env
 oc() { docker compose exec -T openclaw openclaw "$@"; }
 
 if [[ "${1:-}" == "--list" ]]; then oc automations list; exit 0; fi
 
 TZ_NAME="${HOME_TZ:-Europe/Warsaw}"
-# Reports: SolaX data + pure planning tools, delegation, memory. The specialists'
-# MCP tools are listed so a spawned weather-cast/trader keeps them even if the cap
-# is applied to children; the dispatcher itself is still denied those by its policy.
-REPORT_TOOLS="solax-cloud__get_realtime_data,solax-cloud__estimate_grid_charge_need,solax-cloud__build_tou_settings,netatmo-weather__*,rce-prices__*,sessions_spawn,sessions_yield,subagents,read,write,memory_search,memory_get"
+# Reports: SolaX data + pure planning tools, delegation (sessions_send: weather-cast
+# and trader run in their own sessions with their own tools), memory.
+REPORT_TOOLS="solax-cloud__get_realtime_data,solax-cloud__estimate_grid_charge_need,solax-cloud__build_tou_settings,sessions_send,read,write,memory_search,memory_get"
 ALERT_TOOLS="netatmo-weather__*,read,write,memory_search,memory_get"
 MAINTENANCE_TOOLS="read,write,memory_search,memory_get"
 existing="$(oc automations list 2>/dev/null || true)"

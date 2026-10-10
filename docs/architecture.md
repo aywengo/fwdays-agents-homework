@@ -24,7 +24,7 @@ flowchart LR
   W --> DI
   X -- A2A 1.0 JSON-RPC --> DI
   C --> DI
-  DI -- sessions_spawn --> WC & TR
+  DI -- sessions_send --> WC & TR
   TR -- sessions_send --> WC
   DI --> S
   WC --> N
@@ -38,7 +38,7 @@ flowchart LR
 
 | Агент | Роль | MCP-інструменти | Інші інструменти | Заборонено |
 | --- | --- | --- | --- | --- |
-| `dispatcher` | Точка входу, звіти, статистика SolaX та (за потреби) зміна режимів | `solax-cloud__*` | пам'ять, read/write у власному workspace, `sessions_spawn`/`yield`/`send` | `netatmo-weather__*`, `rce-prices__*`, exec, web, browser, messaging, automation |
+| `dispatcher` | Точка входу, звіти, статистика SolaX та (за потреби) зміна режимів | `solax-cloud__*` | пам'ять, read/write у власному workspace, `sessions_send` | `netatmo-weather__*`, `rce-prices__*`, exec, web, browser, messaging, automation |
 | `weather-cast` | Показники станції, прогноз, прогноз генерації PV | `netatmo-weather__*` | пам'ять, власний workspace, `sessions_send` | `solax-cloud__*`, `rce-prices__*`, `sessions_spawn`, `subagents` + глобальні заборони |
 | `trader` | Аналіз цін RCE та поради щодо часу використання енергії | `rce-prices__*` | пам'ять, власний workspace, `sessions_send` (запити до weather-cast) | `solax-cloud__*`, `netatmo-weather__*`, `sessions_spawn`, `subagents` + глобальні заборони |
 
@@ -65,8 +65,8 @@ flowchart LR
 
 Два механізми, що доповнюють один одного:
 
-- **Усередині Gateway**: dispatcher делегує через `sessions_spawn` і збирає
-  результати через `sessions_yield`; trader консультується з weather-cast через
+- **Усередині Gateway**: dispatcher делегує через `sessions_send` (колега працює
+  у власній сесії зі своїми інструментами, відповідь повертається в той самий хід); trader консультується з weather-cast через
   `sessions_send`. У Discord (окремий бот для кожного агента) передачі задач також
   видно як @згадки в командному каналі.
 - **Стандартний протокол A2A 1.0** (`channels.a2a`): Gateway публікує Agent Card
@@ -138,10 +138,10 @@ sequenceDiagram
   participant U as Користувач (Discord/WhatsApp)
   C->>D: MORNING_REPORT
   D->>D: get_realtime_data (SOC)
-  D->>W: sessions_spawn: прогноз на сьогодні
+  D->>W: sessions_send: прогноз на сьогодні
   W-->>D: pv_estimate_kwh, хмарність
   D->>D: estimate_grid_charge_need → X кВт·год
-  D->>T: sessions_spawn: plan_grid_charge(X, max_kW)
+  D->>T: sessions_send: plan_grid_charge(X, max_kW)
   T-->>D: вікно 12:00–14:00, вигідна різниця з піком
   D->>D: build_tou_settings → точні аргументи
   D->>M: status: pending, valid_until 14:00

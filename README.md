@@ -49,7 +49,7 @@
 | 1 | Агенти з різними ролями та межами доступу, модель, MCP | 3 агенти OpenClaw з окремими workspace та інструкціями ([agents/](agents/)). Модель — Anthropic (налаштовується). 3 MCP-сервери ([mcp-servers/](mcp-servers/)). Кожен агент бачить **лише свій** MCP (deny `server__*`), shell/web/браузер заборонені, керування батареєю вимкнене за замовчуванням і потребує підтвердження. Деталі: [docs/architecture.md](docs/architecture.md#агенти-та-межі-доступу) |
 | 2 | Persistent memory | Markdown-пам'ять OpenClaw (`MEMORY.md`, `memory/*.md`) у `.local/workspaces`, переживає перезапуск. Ранковий звіт рахує нічне споживання з **вечірнього знімка, збереженого в попередньому запуску**; «запам'ятай…» зберігає вподобання |
 | 3 | Канал комунікації | **Discord** (окремий бот для кожного агента) і **WhatsApp** (диспетчер). Звіти доставляються автоматично за розкладом |
-| 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_spawn` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
+| 4 | Співпраця через A2A | Усередині gateway: dispatcher → `sessions_send` → weather-cast/trader, trader → `sessions_send` → weather-cast; видимі handoff-и в Discord. Плюс стандартний протокол **A2A 1.0** (Agent Card + JSON-RPC) для зовнішніх агентів: [scripts/a2a_client.py](scripts/a2a_client.py) |
 | 5 | Observability | OpenTelemetry → **Grafana LGTM** (Tempo, Prometheus, Loki) з готовим дашбордом: ходи агентів, tool calls (MCP), A2A-обмін, заблоковані виклики, помилки, токени. [docs/observability.md](docs/observability.md) |
 | + | Скіли | 7 скілів, кожен агент має свій allowlist (див. таблицю нижче): зовнішній [no-ai-slop](https://github.com/petergyang/no-ai-slop) (зафіксований коміт + sha256 lock) і 6 власних. [docs/skills.md](docs/skills.md) |
 
@@ -72,8 +72,8 @@
 ```mermaid
 flowchart LR
   U[Discord / WhatsApp / Cron / A2A-клієнт] --> D[☀️ dispatcher]
-  D -- sessions_spawn --> W[🌦️ weather-cast]
-  D -- sessions_spawn --> T[💹 trader]
+  D -- sessions_send --> W[🌦️ weather-cast]
+  D -- sessions_send --> T[💹 trader]
   T -- sessions_send --> W
   D --> S[(SolaX MCP)]
   W --> N[(Netatmo + Open-Meteo MCP)]
@@ -114,7 +114,7 @@ scripts/setup_automations.sh               # звіти, перевірка по
 1. **Канал + A2A:** у Discord `@Dispatcher скільки зараз у батареї і коли сьогодні найдешевша енергія?` → диспетчер читає SolaX, делегує trader-у, відповідає українською.
 2. **Межі доступу:** `@Trader який зараз заряд батареї?` → trader відповідає, що не має доступу до SolaX, і пропонує звернутися до диспетчера; у Grafana видно заблокований виклик, якщо модель спробує.
 3. **Пам'ять:** `запам'ятай: мінімальний заряд батареї для мене — 25%` → перезапуск `docker compose restart openclaw` → нова розмова: `який мінімальний заряд я просив?`.
-4. **Звіт:** `docker compose exec openclaw openclaw automations run <job-id>` → звіт у Discord/WhatsApp; у Grafana трейс з викликами `solax-cloud__*`, `sessions_spawn`, `netatmo-weather__*`, `rce-prices__*`.
+4. **Звіт:** `docker compose exec openclaw openclaw automations run <job-id>` → звіт у Discord/WhatsApp; у Grafana трейс з викликами `solax-cloud__*`, `sessions_send`, `netatmo-weather__*`, `rce-prices__*`.
 5. **Пропозиція TOU:** після ранкового звіту з пропозицією відповісти `@Dispatcher так` (або «так» у WhatsApp) → dispatcher читає `memory/tou-proposal.md` і застосовує вікно заряду (потрібно `SOLAX_ALLOW_CONTROL=true`). Ввечері він запропонує повернути базові налаштування.
 6. **Зовнішній A2A:** `python3 scripts/a2a_client.py send "Підготуй короткий прогноз на завтра"`.
 7. **Історія:** `@Dispatcher скільки виробили за тиждень і яка самодостатність?` → підсумок з пам'яті за скілом `energy-history-analysis`. **Попередження:** `@WeatherCast чи буде сьогодні сильний вітер?` (скіл `weather-alerts`; ті ж рядки з'являються в звітах).
