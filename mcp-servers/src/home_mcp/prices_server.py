@@ -24,6 +24,8 @@ from .common import atomic_write_json, run, state_dir
 log = logging.getLogger("home_mcp.prices")
 
 API_URL = os.getenv("PRICES_API_URL", "https://godzinowe.pl/api.php")
+# Fallback: the original PSE RCE data that godzinowe.pl aggregates.
+PSE_API_URL = os.getenv("PSE_API_URL", "https://api.raporty.pse.pl/api/rce-pln")
 TZ = ZoneInfo(os.getenv("HOME_TZ", "Europe/Warsaw"))
 USER_AGENT = "fwdays-agents-homework/0.1 (private home energy assistant)"
 # Tomorrow's prices usually appear after 13:00-14:00; re-check at most this often.
@@ -132,7 +134,63 @@ def normalize(payload: dict, day: dt.date) -> dict[str, Any]:
     }
 
 
+# Thresholds of the godzinowe.pl classification (PLN/kWh), reused for PSE data.
+_CLASSES = ((0.15, "BARDZO NISKA"), (0.35, "NISKA"), (0.55, "ŚREDNIA"),
+            (0.75, "WYSOKA"), (1.5, "BARDZO WYSOKA"))
+
+
+def classify(price_per_kwh: float) -> str:
+    if price_per_kwh < 0:
+        return "UJEMNA"
+    if round(price_per_kwh, 2) == 0:
+        return "ZERO"
+    for limit, label in _CLASSES:
+        if price_per_kwh < limit:
+            return label
+    return "EKSTREMALNA"
+
+
+def normalize_pse(payload: dict, day: dt.date) -> dict[str, Any]:
+    """PSE RCE 15-minute values (PLN/MWh) -> hourly records like godzinowe.pl."""
+    quarters: dict[int, list[float]] = {}
+    for row in payload.get("value") or []:
+        period, price = str(row.get("period") or ""), row.get("rce_pln")
+        if price is None or len(period) < 2 or not period[:2].isdigit():
+            continue
+        quarters.setdefault(int(period[:2]), []).append(float(price))
+    records = []
+    for hour in sorted(quarters):
+        avg_mwh = sum(quarters[hour]) / len(quarters[hour])
+        per_kwh = avg_mwh / 1000
+        records.append({"hour": f"{hour:02d}-{hour + 1:02d}", "price_pln_mwh": round(avg_mwh, 2),
+                        "price_per_kwh": round(per_kwh, 5), "classification": classify(per_kwh)})
+    available = len(records) >= 23  # 23/24/25 hours depending on DST
+    return {
+        "date": day.isoformat(),
+        "available": available,
+        "source": "PSE RCE (api.raporty.pse.pl), 15-min values averaged to hours",
+        "records": records if available else [],
+        "summary": summarize(records) if available else {},
+    }
+
+
+async def _from_godzinowe(day: dt.date, client: httpx.AsyncClient) -> dict[str, Any]:
+    resp = await client.get(API_URL, params=_action_for(day))
+    if resp.status_code == 429:
+        raise PricesError("godzinowe.pl rate limit (HTTP 429)")
+    resp.raise_for_status()
+    return normalize(resp.json(), day)
+
+
+async def _from_pse(day: dt.date, client: httpx.AsyncClient) -> dict[str, Any]:
+    resp = await client.get(PSE_API_URL, params={
+        "$filter": f"business_date eq '{day.isoformat()}'", "$first": 200})
+    resp.raise_for_status()
+    return normalize_pse(resp.json(), day)
+
+
 async def fetch_day(day: dt.date, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+    """godzinowe.pl first; PSE (the original source) when it fails or has no data."""
     cached = _read_cache(day)
     now = dt.datetime.now(dt.timezone.utc).timestamp()
     if cached and cached.get("available"):
@@ -142,22 +200,30 @@ async def fetch_day(day: dt.date, client: httpx.AsyncClient | None = None) -> di
 
     owns = client is None
     client = client or httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT})
+    errors: list[str] = []
+    result: dict[str, Any] | None = None
     try:
-        resp = await client.get(API_URL, params=_action_for(day))
-        if resp.status_code == 429:
-            if cached:
-                return {**cached, "cache": "stale", "warning": "rate limited by API; returned cached data"}
-            raise PricesError("godzinowe.pl rate limit (HTTP 429); try again in a few minutes")
-        resp.raise_for_status()
-        result = normalize(resp.json(), day)
-    except (httpx.HTTPError, ValueError) as exc:
-        if cached:
-            return {**cached, "cache": "stale", "warning": f"API error: {exc}"}
-        raise PricesError(f"Could not fetch prices for {day}: {exc}") from exc
+        for name, source in (("godzinowe.pl", _from_godzinowe), ("PSE", _from_pse)):
+            try:
+                candidate = await source(day, client)
+            except (httpx.HTTPError, ValueError, PricesError) as exc:
+                errors.append(f"{name}: {exc}")
+                log.warning("prices source %s failed for %s: %s", name, day, exc)
+                continue
+            if candidate.get("available"):
+                result = candidate
+                break
+            result = result or candidate  # remember "not published yet"
     finally:
         if owns:
             await client.aclose()
 
+    if result is None:
+        if cached:
+            return {**cached, "cache": "stale", "warning": "; ".join(errors)}
+        raise PricesError(f"No price source available for {day}: {'; '.join(errors)}")
+    if errors:
+        result["warnings"] = errors
     result["fetched_at"] = now
     atomic_write_json(_cache_path(day), result)
     return {**result, "cache": "miss"}

@@ -154,6 +154,7 @@ Developer Mode у Discord → правий клік → *Copy ID*. Бот dispat
 | `MCP_HOST` / `MCP_PORT` | `0.0.0.0` / `8000` | Адреса прослуховування HTTP. |
 | `HOME_MCP_STATE_DIR` | `~/.local/state/home-mcp` (у Docker: `/data`) | Ротований токен Netatmo і кеш цін. |
 | `PRICES_API_URL` | `https://godzinowe.pl/api.php` | Базова URL API цін (тести спрямовують її на локальну заглушку). |
+| `PSE_API_URL` | `https://api.raporty.pse.pl/api/rce-pln` | Резервне джерело цін RCE, коли godzinowe.pl недоступний або не має даних. |
 | `LOG_LEVEL` | `INFO` | Рівень логування MCP-серверів. |
 | `OPENCLAW_CONFIG_PATH`, `OPENCLAW_STATE_DIR`, `OPENCLAW_HOME`, `HOME`, `TZ` | див. compose | Шляхи та часовий пояс усередині контейнера OpenClaw. |
 | `A2A_BASE_URL` | `http://127.0.0.1:18789` | URL Gateway для `scripts/a2a_client.py`. |
