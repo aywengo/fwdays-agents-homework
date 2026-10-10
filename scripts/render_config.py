@@ -241,7 +241,7 @@ def whatsapp_block(env: dict[str, str]) -> tuple[dict | None, list]:
 
 
 def build_config(env: dict[str, str]) -> dict:
-    model = env.get("OPENCLAW_MODEL") or "anthropic/claude-sonnet-5"
+    model = env.get("OPENCLAW_MODEL") or "anthropic/claude-haiku-5-5"
     tz = env.get("HOME_TZ") or "Europe/Warsaw"
     channels: dict = {
         "a2a": {

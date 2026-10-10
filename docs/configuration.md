@@ -37,7 +37,7 @@ python3 scripts/render_config.py init     # копіює .env.example -> .env і
 
 | Змінна | Обов. | Тип | Хто читає | Опис |
 | --- | --- | --- | --- | --- |
-| `OPENCLAW_MODEL` | ➖ | — | render_config | Посилання на модель для всіх агентів. За замовчуванням `anthropic/claude-sonnet-5`. |
+| `OPENCLAW_MODEL` | ➖ | — | render_config | Посилання на модель для всіх агентів. За замовчуванням `anthropic/claude-haiku-5-5` (швидка й дешева модель для регулярних звітів і перевірок). Для складніших розмов можна вказати, наприклад, `anthropic/claude-sonnet-5-5`. |
 | `ANTHROPIC_API_KEY` | 🔁 | Секрет | openclaw | API-ключ Anthropic. Альтернатива: залиште порожнім і один раз увійдіть через `docker compose exec openclaw openclaw models auth login --provider anthropic` (зберігається в томі `openclaw-state`). |
 | `OPENAI_API_KEY` | ➖ | Секрет | openclaw | Лише якщо `OPENCLAW_MODEL` — модель `openai/…`. |
 
