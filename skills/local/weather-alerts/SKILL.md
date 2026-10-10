@@ -1,6 +1,6 @@
 ---
 name: weather-alerts
-description: Decide whether current station readings or the forecast warrant a weather alert for the house, at which level, and how to word it. Use for every forecast brief and answer, for the scheduled WEATHER_ALERT_CHECK runs, when the dispatcher asks for alerts for a report, and when the user asks "чи буде буря/мороз/злива". Covers wind, frost, heat, heavy rain, snow on panels and station hardware problems, with per-channel de-duplication via memory.
+description: Decide whether current station readings or the forecast warrant a weather alert for the house, at which level, and how to word it. Use for every forecast brief and answer, for the scheduled WEATHER_ALERT_CHECK runs, when the dispatcher asks for alerts for a report, and when the user asks "чи буде буря/мороз/злива". Covers wind, frost, heat, heavy rain, thunderstorms and hail, freezing rain, high UV, snow on panels and station hardware problems, with per-channel de-duplication via memory.
 ---
 
 # Weather alerts for the house
@@ -24,12 +24,21 @@ If a value is missing (module offline), evaluate the rest and mention the gap.
 | Frost | `temp_min_c` ≤ 0 °C | `temp_min_c` ≤ −8 °C | garden taps and hoses, plants; ice on paths in the morning |
 | Heat | `temp_max_c` ≥ 30 °C | `temp_max_c` ≥ 35 °C | PV output drops in heat; ventilate the battery/inverter room |
 | Heavy rain | `precipitation_mm` ≥ 10 per day | ≥ 25 per day, or station `rain_last_hour_mm` ≥ 10 | gutters and drains; skip garden watering |
-| Snow on panels | precipitation with `temp_max_c` ≤ 1 °C | — | PV near zero until panels clear; do not count on PV in charge plans |
+| Thunderstorm | a `daylight_hours` slot or the day with `condition` thunderstorm (code 95) | with hail (codes 96, 99) | unplug sensitive electronics, stay off the roof and away from the garden; hail can damage cars and panels |
+| Freezing rain / drizzle | `condition` freezing rain or freezing drizzle (codes 56, 57, 66, 67) | — | ice on paths, steps and the car; take care on the roads |
+| UV | `uv_index_max` 8–10 (дуже високий) | ≥ 11 (екстремальний) | shade at midday, SPF 30+, hat; children and pets out of the sun in `uv_windows_3plus` |
+| Snow on panels | `condition` snow / snow showers, or precipitation with `temp_max_c` ≤ 1 °C | — | PV near zero until panels clear; do not count on PV in charge plans |
 | Station hardware | a module with `reachable: false` (module `battery_pct` < 20 is level 1) | — | check the module / replace its batteries |
 
 Rules:
-- Only alert on what the data shows. No thunderstorm or hail alerts: the forecast
-  feed has no such fields. Never invent a source («за даними ІМГВ»).
+- Only alert on what the data shows. Thunderstorms, hail and freezing rain come
+  from the forecast `condition` (WMO weather code); give the hours from the
+  matching `daylight_hours` slots when they are there. Never invent a source
+  («за даними ІМГВ»).
+- UV 3–7 (помірний, високий) is not an alert: `pv-forecast-reading` covers it in
+  normal answers. In autumn and winter the UV index in Poland stays low.
+- Time windows: use the forecast's own hours (`rain_windows`, `uv_windows_3plus`,
+  slot times) and the day's `sunrise`/`sunset`, never fixed hours.
 - Probability matters: for rain use `precipitation_probability_max_pct`; below 40%
   downgrade by one level and say «можливо».
 - Combine hazards of the same day into one message, highest level first.

@@ -28,8 +28,11 @@ from .common import run
 
 log = logging.getLogger("home_mcp.solax")
 CONTROL_TOOL = "set_battery_self_use_mode"
-# Share of daily consumption used before ~17:00 (the rest is evening + night).
+# Fallback share of daily consumption used while PV covers the house, when the
+# day's PV window is unknown (roughly sunrise..17:00 in spring/autumn).
 DAYTIME_SHARE = 0.45
+# Bounds for the share derived from the PV window (short winter / long summer days).
+MIN_DAYTIME_SHARE, MAX_DAYTIME_SHARE = 0.1, 0.7
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
@@ -61,6 +64,31 @@ def battery_settings() -> dict[str, float | None]:
     }
 
 
+def _minutes(value: str) -> int:
+    if not _HHMM.match(value):
+        raise PlanningError("pv_start and pv_end must be HH:MM (00:00-23:59)")
+    hours, minutes = value.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def daytime_share(pv_start: str | None, pv_end: str | None) -> tuple[float, str]:
+    """Share of daily consumption that falls inside the day's PV window.
+
+    The battery has to carry the house from the end of the PV window until it
+    starts again next morning, so a short winter window means a long evening/night.
+    Consumption is assumed flat per hour; the result is clamped to sane bounds.
+    """
+    if not pv_start and not pv_end:
+        return DAYTIME_SHARE, "17:00"
+    if not pv_start or not pv_end:
+        raise PlanningError("pass both pv_start and pv_end, or neither")
+    span = _minutes(pv_end) - _minutes(pv_start)
+    if span <= 0:
+        raise PlanningError("pv_start must be before pv_end")
+    share = min(MAX_DAYTIME_SHARE, max(MIN_DAYTIME_SHARE, span / (24 * 60)))
+    return round(share, 3), pv_end
+
+
 def estimate_need(
     soc_pct: float,
     pv_estimate_kwh: float,
@@ -68,14 +96,20 @@ def estimate_need(
     capacity_kwh: float,
     min_soc: float = 15,
     target_soc: float = 90,
+    pv_start: str | None = None,
+    pv_end: str | None = None,
 ) -> dict[str, Any]:
     """Energy (kWh) to add from the grid so the battery covers evening + night.
 
     Model (deliberately simple and explainable):
+      share           = PV-window length / 24 h (clamped), or DAYTIME_SHARE if unknown
       usable_now      = capacity x (soc - min_soc)
-      daytime_use     = daily x DAYTIME_SHARE,  evening_night_use = daily - daytime_use
-      projected_17h   = clamp(usable_now + pv - daytime_use, 0, capacity x (target - min_soc))
-      grid_kwh        = clamp(evening_night_use - projected_17h, 0, room left after PV, room up to target now)
+      daytime_use     = daily x share,  evening_night_use = daily - daytime_use
+      projected       = clamp(usable_now + pv - daytime_use, 0, capacity x (target - min_soc))
+                        (usable energy when PV stops, at pv_end or 17:00)
+      grid_kwh        = clamp(evening_night_use - projected, 0, room left after PV, room up to target now)
+    `pv_estimate_kwh` should be the PV still expected from now on (weather-cast's
+    pv_remaining_kwh later in the day), because the SOC already contains what was produced.
     """
     if capacity_kwh <= 0:
         raise PlanningError("battery capacity must be positive")
@@ -85,7 +119,8 @@ def estimate_need(
         raise PlanningError("need min_soc < target_soc <= 100")
     usable_max = capacity_kwh * (target_soc - min_soc) / 100
     usable_now = max(0.0, capacity_kwh * (soc_pct - min_soc) / 100)
-    daytime_use = daily_consumption_kwh * DAYTIME_SHARE
+    share, evening_from = daytime_share(pv_start, pv_end)
+    daytime_use = daily_consumption_kwh * share
     evening_night_use = daily_consumption_kwh - daytime_use
     projected = min(usable_max, max(0.0, usable_now + max(0.0, pv_estimate_kwh) - daytime_use))
     room_now = max(0.0, capacity_kwh * (target_soc - soc_pct) / 100)
@@ -95,13 +130,15 @@ def estimate_need(
         "grid_charge_kwh": round(grid_kwh, 2),
         "needed": grid_kwh >= 0.5,
         "usable_now_kwh": round(usable_now, 2),
-        "projected_usable_at_17h_kwh": round(projected, 2),
+        "evening_from": evening_from,
+        "projected_usable_at_evening_kwh": round(projected, 2),
         "evening_night_need_kwh": round(evening_night_use, 2),
         "daytime_use_kwh": round(daytime_use, 2),
         "pv_estimate_kwh": round(pv_estimate_kwh, 2),
         "assumptions": {
             "capacity_kwh": capacity_kwh, "min_soc": min_soc, "target_soc": target_soc,
-            "daily_consumption_kwh": daily_consumption_kwh, "daytime_share": DAYTIME_SHARE,
+            "daily_consumption_kwh": daily_consumption_kwh, "daytime_share": share,
+            "pv_window": f"{pv_start}-{pv_end}" if pv_start and pv_end else None,
         },
     }
 
@@ -148,14 +185,20 @@ def register_planning_tools(server: Any) -> None:
         soc_pct: float,
         pv_estimate_kwh: float,
         daily_consumption_kwh: float | None = None,
+        pv_start: str | None = None,
+        pv_end: str | None = None,
     ) -> dict:
         """Estimate how much energy (kWh) to charge from the grid today. Pure calculation.
 
         Args:
             soc_pct: current battery SOC (%) from get_realtime_data.
-            pv_estimate_kwh: today's PV estimate from weather-cast.
+            pv_estimate_kwh: PV still expected today from weather-cast: the day's
+                pv_estimate_kwh before sunrise, pv_remaining_kwh later in the day.
             daily_consumption_kwh: typical daily house consumption (e.g. average of
                 recent days from memory). Falls back to HOME_DAILY_CONSUMPTION_KWH.
+            pv_start, pv_end: today's pv_window from weather-cast (HH:MM). The
+                evening/night the battery must cover starts at pv_end; without them
+                a fixed 17:00 split is used.
 
         Uses BATTERY_CAPACITY_KWH, BATTERY_MIN_SOC, BATTERY_TARGET_SOC and returns
         grid_charge_kwh, `needed`, max_charge_kw and the intermediate figures.
@@ -167,7 +210,7 @@ def register_planning_tools(server: Any) -> None:
         if not daily:
             raise PlanningError("pass daily_consumption_kwh or configure HOME_DAILY_CONSUMPTION_KWH")
         result = estimate_need(soc_pct, pv_estimate_kwh, daily, cfg["capacity_kwh"],
-                               cfg["min_soc"], cfg["target_soc"])
+                               cfg["min_soc"], cfg["target_soc"], pv_start, pv_end)
         result["max_charge_kw"] = cfg["max_charge_kw"]
         return result
 

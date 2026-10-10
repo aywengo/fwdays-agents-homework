@@ -183,49 +183,213 @@ def station_location(body: dict) -> tuple[float, float] | None:
     return None
 
 
-def shape_forecast(body: dict, days: int, pv_kwp: float | None) -> dict:
+# WMO weather interpretation codes (Open-Meteo `weather_code`) -> (English, Ukrainian).
+WMO_CODES: dict[int, tuple[str, str]] = {
+    0: ("clear sky", "ясно"),
+    1: ("mainly clear", "переважно ясно"),
+    2: ("partly cloudy", "мінлива хмарність"),
+    3: ("overcast", "похмуро"),
+    45: ("fog", "туман"),
+    48: ("rime fog", "туман з інеєм"),
+    51: ("light drizzle", "слабка мряка"),
+    53: ("drizzle", "мряка"),
+    55: ("dense drizzle", "сильна мряка"),
+    56: ("freezing drizzle", "крижана мряка"),
+    57: ("dense freezing drizzle", "сильна крижана мряка"),
+    61: ("light rain", "слабкий дощ"),
+    63: ("rain", "дощ"),
+    65: ("heavy rain", "сильний дощ"),
+    66: ("freezing rain", "крижаний дощ"),
+    67: ("heavy freezing rain", "сильний крижаний дощ"),
+    71: ("light snow", "слабкий сніг"),
+    73: ("snow", "сніг"),
+    75: ("heavy snow", "сильний снігопад"),
+    77: ("snow grains", "снігова крупа"),
+    80: ("light rain showers", "короткочасний дощ"),
+    81: ("rain showers", "зливи"),
+    82: ("violent rain showers", "сильні зливи"),
+    85: ("snow showers", "короткочасний сніг"),
+    86: ("heavy snow showers", "сильні снігопади"),
+    95: ("thunderstorm", "гроза"),
+    96: ("thunderstorm with hail", "гроза з градом"),
+    99: ("thunderstorm with heavy hail", "гроза з сильним градом"),
+}
+# WHO UV index categories: (upper bound exclusive, English, Ukrainian).
+UV_LEVELS = ((3, "low", "низький"), (6, "moderate", "помірний"), (8, "high", "високий"),
+             (11, "very high", "дуже високий"), (float("inf"), "extreme", "екстремальний"))
+PERFORMANCE_RATIO = 0.8
+# An hour counts as "productive" when PV gives at least this share of the installed kWp
+# (or, without PV_KWP, when irradiance reaches 100 W/m2).
+PRODUCTIVE_SHARE = 0.1
+RAIN_PROBABILITY_PCT = 50
+RAIN_MM = 0.2
+
+
+def condition(code: Any) -> dict:
+    if code is None:
+        return {"weather_code": None, "condition": None, "condition_uk": None}
+    en, uk = WMO_CODES.get(int(code), (f"code {int(code)}", f"код {int(code)}"))
+    return {"weather_code": int(code), "condition": en, "condition_uk": uk}
+
+
+def uv_level(value: Any) -> dict:
+    if value is None:
+        return {"uv_level": None, "uv_level_uk": None}
+    for limit, en, uk in UV_LEVELS:
+        if value < limit:
+            return {"uv_level": en, "uv_level_uk": uk}
+    return {"uv_level": None, "uv_level_uk": None}  # unreachable
+
+
+def _parse_local(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    parsed = dt.datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=TZ)
+
+
+def _windows(slots: list[dt.datetime]) -> list[str]:
+    """Merge one-hour slots (by start time) into 'HH:MM-HH:MM' ranges."""
+    out: list[list[dt.datetime]] = []
+    for start in sorted(slots):
+        if out and out[-1][1] == start:
+            out[-1][1] = start + dt.timedelta(hours=1)
+        else:
+            out.append([start, start + dt.timedelta(hours=1)])
+    return [f"{a:%H:%M}-{'24:00' if b.date() > a.date() else format(b, '%H:%M')}" for a, b in out]
+
+
+def _slots(hourly: dict) -> list[dict]:
+    """Hourly rows as one-hour slots keyed by their START time.
+
+    Open-Meteo reports radiation and precipitation for the hour *preceding* each
+    timestamp, so the row at 12:00 describes the 11:00-12:00 slot.
+    """
+    times = hourly.get("time") or []
+    rows = []
+    for j, ts in enumerate(times):
+        def at(key: str, j: int = j):
+            values = hourly.get(key) or []
+            return values[j] if j < len(values) else None
+
+        end = _parse_local(ts)
+        rows.append({
+            "start": end - dt.timedelta(hours=1),
+            "end": end,
+            "weather_code": at("weather_code"),
+            "cloud_cover_pct": at("cloud_cover"),
+            "radiation_w_m2": at("shortwave_radiation"),
+            "uv_index": at("uv_index"),
+            "precip_probability_pct": at("precipitation_probability"),
+            "precipitation_mm": at("precipitation"),
+            "temp_c": at("temperature_2m"),
+        })
+    return rows
+
+
+def _is_wet(slot: dict) -> bool:
+    return ((slot["precip_probability_pct"] or 0) >= RAIN_PROBABILITY_PCT
+            or (slot["precipitation_mm"] or 0) >= RAIN_MM)
+
+
+def _pv_kw(slot: dict, pv_kwp: float | None) -> float | None:
+    if not pv_kwp or slot["radiation_w_m2"] is None:
+        return None
+    return round(slot["radiation_w_m2"] / 1000 * pv_kwp * PERFORMANCE_RATIO, 2)
+
+
+def shape_forecast(body: dict, days: int, pv_kwp: float | None,
+                   now: dt.datetime | None = None) -> dict:
+    now = (now or dt.datetime.now(TZ)).astimezone(TZ)
     daily = body.get("daily") or {}
-    hourly = body.get("hourly") or {}
+    slots = _slots(body.get("hourly") or {})
     out_days = []
     for i, date in enumerate((daily.get("time") or [])[:days]):
         def pick(key: str):
             values = daily.get(key) or []
             return values[i] if i < len(values) else None
 
+        sunrise, sunset = _parse_local(pick("sunrise")), _parse_local(pick("sunset"))
         radiation_mj = pick("shortwave_radiation_sum")
+        daylight_s = pick("daylight_duration")
+        if daylight_s is None and sunrise and sunset:
+            daylight_s = (sunset - sunrise).total_seconds()
+        uv_max = pick("uv_index_max")
         day = {
             "date": date,
+            **condition(pick("weather_code")),
             "temp_min_c": pick("temperature_2m_min"),
             "temp_max_c": pick("temperature_2m_max"),
             "precipitation_mm": pick("precipitation_sum"),
+            "precipitation_hours": pick("precipitation_hours"),
             "precipitation_probability_max_pct": pick("precipitation_probability_max"),
             "wind_max_kmh": pick("wind_speed_10m_max"),
             "gust_max_kmh": pick("wind_gusts_10m_max"),
-            "sunrise": pick("sunrise"),
-            "sunset": pick("sunset"),
+            "sunrise": f"{sunrise:%H:%M}" if sunrise else None,
+            "sunset": f"{sunset:%H:%M}" if sunset else None,
+            "daylight_h": round(daylight_s / 3600, 1) if daylight_s is not None else None,
             "sunshine_hours": round(pick("sunshine_duration") / 3600, 1) if pick("sunshine_duration") is not None else None,
             "solar_radiation_kwh_m2": round(radiation_mj / 3.6, 2) if radiation_mj is not None else None,
+            "uv_index_max": uv_max,
+            **uv_level(uv_max),
         }
         if pv_kwp and day["solar_radiation_kwh_m2"] is not None:
-            # Rough yield estimate: irradiation x kWp x performance ratio 0.8.
-            day["pv_estimate_kwh"] = round(day["solar_radiation_kwh_m2"] * pv_kwp * 0.8, 1)
-        hours = []
-        for j, ts in enumerate(hourly.get("time") or []):
-            if not ts.startswith(date):
-                continue
+            # Rough yield estimate: irradiation x kWp x performance ratio.
+            day["pv_estimate_kwh"] = round(day["solar_radiation_kwh_m2"] * pv_kwp * PERFORMANCE_RATIO, 1)
 
-            def at(key: str, j: int = j):
-                values = hourly.get(key) or []
-                return values[j] if j < len(values) else None
+        day_slots = [s for s in slots if s["start"].date().isoformat() == date]
+        if sunrise and sunset:
+            light = [s for s in day_slots if s["end"] > sunrise and s["start"] < sunset]
+        else:
+            light = [s for s in day_slots if (s["radiation_w_m2"] or 0) > 0]
+        clouds = [s["cloud_cover_pct"] for s in light if s["cloud_cover_pct"] is not None]
+        day["cloud_cover_daylight_avg_pct"] = round(sum(clouds) / len(clouds)) if clouds else None
+        day["rain_windows"] = _windows([s["start"] for s in day_slots if _is_wet(s)])
+        day["uv_windows_3plus"] = _windows([s["start"] for s in light if (s["uv_index"] or 0) >= 3])
 
-            hours.append({
-                "time": ts[11:16],
-                "cloud_cover_pct": at("cloud_cover"),
-                "radiation_w_m2": at("shortwave_radiation"),
-                "precip_probability_pct": at("precipitation_probability"),
-                "temp_c": at("temperature_2m"),
-            })
-        day["daylight_hours"] = [h for h in hours if (h["radiation_w_m2"] or 0) > 0]
+        if pv_kwp:
+            productive = [s for s in light if (_pv_kw(s, pv_kwp) or 0) >= PRODUCTIVE_SHARE * pv_kwp]
+        else:
+            productive = [s for s in light if (s["radiation_w_m2"] or 0) >= 100]
+        if productive:
+            day["pv_window"] = f"{productive[0]['start']:%H:%M}-{productive[-1]['end']:%H:%M}"
+            peak = max(productive, key=lambda s: s["radiation_w_m2"] or 0)
+            day["pv_peak_hour"] = f"{peak['start']:%H:%M}"
+        else:
+            day["pv_window"] = None
+            day["pv_peak_hour"] = None
+
+        day["daylight_hours"] = [{
+            "time": f"{s['start']:%H:%M}",
+            "condition_uk": condition(s["weather_code"])["condition_uk"],
+            "cloud_cover_pct": s["cloud_cover_pct"],
+            "radiation_w_m2": s["radiation_w_m2"],
+            "uv_index": s["uv_index"],
+            "precip_probability_pct": s["precip_probability_pct"],
+            "precipitation_mm": s["precipitation_mm"],
+            "temp_c": s["temp_c"],
+            **({"pv_kw": _pv_kw(s, pv_kwp)} if pv_kwp else {}),
+        } for s in light]
+
+        if date == now.date().isoformat():
+            current = next((s for s in day_slots if s["start"] <= now < s["end"]), None)
+            is_day = bool(sunrise and sunset and sunrise <= now < sunset)
+            day["now"] = {
+                "time": f"{now:%H:%M}",
+                "is_daylight": is_day,
+                "minutes_to_sunset": int((sunset - now).total_seconds() // 60) if is_day else None,
+                "minutes_to_sunrise": int((sunrise - now).total_seconds() // 60) if sunrise and now < sunrise else None,
+                **({k: current[k] for k in ("cloud_cover_pct", "uv_index", "temp_c", "precipitation_mm")} if current else {}),
+                **(condition(current["weather_code"]) if current else {}),
+            }
+            if pv_kwp:
+                remaining = 0.0
+                for s in light:
+                    if s["end"] <= now:
+                        continue
+                    share = min(1.0, (s["end"] - max(now, s["start"])).total_seconds() / 3600)
+                    remaining += (_pv_kw(s, pv_kwp) or 0) * share
+                day["pv_remaining_kwh"] = round(remaining, 1)
         out_days.append(day)
     return {"source": "Open-Meteo", "timezone": body.get("timezone", TZ_NAME), "days": out_days}
 
@@ -250,9 +414,18 @@ async def get_forecast(days: int = 1) -> dict:
     Args:
         days: 1 (today) to 3. Day 1 is today in the home time zone.
 
-    Returns per day: temperature range, precipitation, wind, sunrise/sunset,
-    sunshine hours, solar irradiation (kWh/m2), an hourly daylight breakdown
-    (cloud cover, radiation) and, when PV_KWP is configured, a rough PV yield estimate.
+    Returns per day (times are local HH:MM):
+    - condition / condition_uk (WMO weather code), temperature range;
+    - precipitation (mm, hours, max probability) and `rain_windows` (hours with
+      >=50% probability or >=0.2 mm); wind and gusts;
+    - daylight: sunrise, sunset, daylight_h; sunshine_hours, solar irradiation (kWh/m2);
+    - UV: uv_index_max, uv_level / uv_level_uk (WHO scale), uv_windows_3plus;
+    - cloud_cover_daylight_avg_pct; pv_window (productive hours) and pv_peak_hour;
+    - daylight_hours: one-hour slots between sunrise and sunset (time = slot start)
+      with condition, cloud cover, irradiance, UV, rain, temperature, pv_kw;
+    - pv_estimate_kwh for the whole day when PV_KWP is configured;
+    - today only: `now` (current condition, is_daylight, minutes to sunset or
+      sunrise) and pv_remaining_kwh (PV still expected from now until sunset).
     """
     days = max(1, min(int(days), 3))
     async with httpx.AsyncClient(timeout=20) as client:
@@ -269,11 +442,15 @@ async def get_forecast(days: int = 1) -> dict:
             "timezone": TZ_NAME,
             "forecast_days": days,
             "daily": ",".join([
-                "temperature_2m_max", "temperature_2m_min", "precipitation_sum",
-                "precipitation_probability_max", "wind_speed_10m_max", "wind_gusts_10m_max",
-                "sunrise", "sunset", "sunshine_duration", "shortwave_radiation_sum",
+                "weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum",
+                "precipitation_hours", "precipitation_probability_max", "wind_speed_10m_max",
+                "wind_gusts_10m_max", "sunrise", "sunset", "daylight_duration",
+                "sunshine_duration", "shortwave_radiation_sum", "uv_index_max",
             ]),
-            "hourly": "temperature_2m,cloud_cover,shortwave_radiation,precipitation_probability",
+            "hourly": ",".join([
+                "temperature_2m", "weather_code", "cloud_cover", "shortwave_radiation",
+                "precipitation_probability", "precipitation", "uv_index",
+            ]),
         })
         if resp.status_code >= 400:
             raise WeatherError(f"Open-Meteo request failed (HTTP {resp.status_code})")

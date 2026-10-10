@@ -62,6 +62,27 @@ def test_need_never_exceeds_room():
     assert r["grid_charge_kwh"] == 0.5
 
 
+def test_daytime_share_follows_pv_window():
+    assert sx.daytime_share("09:00", "15:00") == (0.25, "15:00")
+    assert sx.daytime_share(None, None) == (sx.DAYTIME_SHARE, "17:00")
+    assert sx.daytime_share("10:00", "11:00")[0] == sx.MIN_DAYTIME_SHARE  # clamped
+
+
+@pytest.mark.parametrize("start,end", [("09:00", None), ("15:00", "09:00"), ("9", "15:00")])
+def test_daytime_share_rejects_bad_windows(start, end):
+    with pytest.raises(sx.PlanningError):
+        sx.daytime_share(start, end)
+
+
+def test_need_uses_pv_window_for_evening():
+    r = sx.estimate_need(soc_pct=50, pv_estimate_kwh=5, daily_consumption_kwh=14, capacity_kwh=10,
+                         pv_start="10:00", pv_end="14:00")
+    assert r["evening_from"] == "14:00" and r["assumptions"]["pv_window"] == "10:00-14:00"
+    # short winter window: share 4/24 = 0.167 -> daytime use 2.34, evening/night 11.66
+    assert r["daytime_use_kwh"] == 2.34 and r["evening_night_need_kwh"] == 11.66
+    assert sx.estimate_need(50, 5, 14, 10)["evening_from"] == "17:00"
+
+
 def test_tou_settings_are_explicit():
     s = sx.tou_settings("12:00", "14:00", min_soc=15, target_soc=90)
     a, b = s["apply_args"], s["baseline_args"]
