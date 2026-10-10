@@ -8,7 +8,10 @@ description: Summarise past energy data from memory/energy-log.md for a day, wee
 Source: `memory/energy-log.md` (and rotated `memory/energy-log-YYYY-MM.md` files if
 they exist). Columns:
 
-`| time | kind | soc_% | import_total_kWh | export_total_kWh | yield_total_kWh | batt_charge_total_kWh | batt_discharge_total_kWh | daily_yield_kWh | daily_consumption_kWh |`
+`| time | kind | soc_% | import_total_kWh | export_total_kWh | yield_total_kWh | ac_output_total_kWh | batt_charge_total_kWh | batt_discharge_total_kWh | daily_yield_kWh | daily_consumption_kWh |`
+
+Older rows may lack `ac_output_total_kWh`; values the inverter does not report are `-`.
+This installation reports no battery charge/discharge totals (always `-`).
 
 Read the file with `memory_get`/`read`; use `memory_search` only to find older files.
 
@@ -28,15 +31,18 @@ daily values by hand is not.
 | Production `P` | Δ `yield_total_kWh` |
 | Import `I` | Δ `import_total_kWh` |
 | Export `E` | Δ `export_total_kWh` |
-| Battery in / out | Δ `batt_charge_total_kWh` / Δ `batt_discharge_total_kWh` |
-| Consumption `C` | `P + I − E − (battery in − battery out)` |
+| Inverter AC output `A` | Δ `ac_output_total_kWh` (PV and battery energy delivered on the AC side) |
+| Consumption `C` | `A + I − E` (includes grid energy used to charge the battery on grid-charge days) |
+| Battery in / out | Δ `batt_charge_total_kWh` / Δ `batt_discharge_total_kWh`, only if both boundary rows have numbers; otherwise omit |
 | Self-consumption | `(P − E) / P` — share of own production used at home |
 | Self-sufficiency | `(C − I) / C` — share of consumption covered without the grid |
-| Battery cycles | battery out / capacity (capacity from `estimate_grid_charge_need` assumptions or `MEMORY.md`) |
+| Battery cycles | battery out / capacity, only when battery out is known; otherwise omit the line |
 | Average per day | metric / number of days |
 
 Cross-check: the sum of `daily_consumption_kWh` over the evening rows should be
 within ~10% of `C`. If not, report `C` from counters and mention the mismatch.
+If a boundary row has no `ac_output_total_kWh` (logged before this column existed),
+use the sum of `daily_consumption_kWh` instead and say so.
 
 ## 3. Data-quality checks (always run, report briefly)
 - **Gaps**: days with no evening row. Report "дані за N з M днів".
@@ -67,6 +73,7 @@ within ~10% of `C`. If not, report `C` from counters and mention the mismatch.
 ♻️ Власне споживання 77% · самодостатність 68%
 ℹ️ Дані за 7 з 7 днів.
 ```
-Follow with at most two sentences of interpretation backed by the numbers.
+Drop the 🔋 line when battery out is unknown (this installation). Follow with at
+most two sentences of interpretation backed by the numbers.
 Values are estimates from the inverter counters; say «≈» where the formula
 estimates (consumption, cycles).

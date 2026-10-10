@@ -101,7 +101,7 @@ The same report may run once per channel (the prompt says `channel: discord` or
    ```
    ☀️ Ранковий звіт — <date>
    🔋 Батарея: <soc>% (ввечері було <soc_prev>%, <delta> п.п.)
-   🏠 Споживання вночі: ≈<kWh> кВт·год (мережа <import>, батарея <discharge>)
+   🏠 Споживання вночі: ≈<kWh> кВт·год (з мережі <import>, від батареї через інвертор <ac_output>)
    🌦️ Погода сьогодні: <temp range>, <rain>, вітер <wind>; сонце ≈<h> год, PV ≈<kWh>
    <weather-cast's alerts_uk lines, unchanged, only if alerts are not none>
    💹 Ціни сьогодні: мін <price> о <hour>, макс <price> о <hour>; дешеве вікно <window>
@@ -179,17 +179,27 @@ defaults are unsafe (`charge_from_grid_enable=1`, `min_soc=10`). Therefore:
    (`SOLAX_ALLOW_CONTROL`) and give the settings for the SolaX app instead.
 
 ### Formulas (state them as estimates)
-- Overnight consumption ≈ Δ`meter1.totalImportEnergy_kWh` + Δ`battery.totalDischarge_kWh`
-  − Δ`meter1.totalExportEnergy_kWh` (between evening and morning snapshots).
-- Daily consumption ≈ `energy.dailyYield_kWh` + `meter1.todayImportEnergy_kWh`
-  − `meter1.todayExportEnergy_kWh` − (Δ`battery.totalCharge_kWh` − Δ`battery.totalDischarge_kWh`)
-  since the morning snapshot.
+This inverter does not report battery charge/discharge totals or battery power
+(they come back as null), so consumption is computed from the inverter's AC
+output, which already includes energy the battery delivered to the house:
+- Overnight consumption ≈ Δ`energy.totalACOutput_kWh` + Δ`meter1.totalImportEnergy_kWh`
+  − Δ`meter1.totalExportEnergy_kWh` (between the evening and morning snapshots).
+- Daily consumption (evening report) ≈ `energy.dailyACOutput_kWh` + `meter1.todayImportEnergy_kWh`
+  − `meter1.todayExportEnergy_kWh` (today's counters since midnight).
+- On a day when a grid-charge window was applied, imported energy that went into
+  the battery is counted as consumption; say «включно із зарядом батареї з мережі».
+- If `battery.totalCharge_kWh`/`totalDischarge_kWh` ever return numbers, log them too,
+  but keep using the formulas above for consistency.
+- Ignore `battery.soh_percent` when it is 0 (not reported) and `battery.remainingEnergy_kWh`
+  (unreliable for this battery); stored energy ≈ SOC × battery capacity from
+  `estimate_grid_charge_need` assumptions.
 - If a snapshot is missing (first run, restart gap), say so and skip that figure.
 
 ## Memory (persists across restarts and new conversations)
 - `memory/energy-log.md`: one table row per snapshot. Create it with this header if missing:
-  `| time | kind | soc_% | import_total_kWh | export_total_kWh | yield_total_kWh | batt_charge_total_kWh | batt_discharge_total_kWh | daily_yield_kWh | daily_consumption_kWh |`
-  then append rows (`daily_consumption_kWh` only on `evening` rows, `-` otherwise).
+  `| time | kind | soc_% | import_total_kWh | export_total_kWh | yield_total_kWh | ac_output_total_kWh | batt_charge_total_kWh | batt_discharge_total_kWh | daily_yield_kWh | daily_consumption_kWh |`
+  then append rows (`daily_consumption_kWh` only on `evening` rows, `-` otherwise;
+  `-` for any value the API returns as null).
   Never rewrite old rows. At most one row per day and kind. The monthly
   maintenance (memory-hygiene skill) moves past months to `memory/energy-log-YYYY-MM.md`.
 - `memory/tou-proposal.md`: the single current proposal (see above). It is how a
