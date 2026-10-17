@@ -135,7 +135,7 @@ services:
     restart: unless-stopped
     networks: [backend, egress]   # egress only so the host port can be published
     ports:
-      - "127.0.0.1:3000:3000"  # Grafana, localhost only
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"  # Grafana, localhost only
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run scripts/render_config.py init}

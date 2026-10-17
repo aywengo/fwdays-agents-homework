@@ -28,6 +28,7 @@ python3 scripts/render_config.py init     # копіює .env.example -> .env і
 | `MCP_INTERNAL_TOKEN` | ✅ | Секрет | openclaw, solax-mcp, weather-mcp, prices-mcp | Спільний bearer-токен між OpenClaw і трьома MCP-серверами. Усередині MCP-контейнерів стає `MCP_AUTH_TOKEN`. |
 | `A2A_CLIENT_TOKEN` | ✅ | Секрет | openclaw, `scripts/a2a_client.py` | Bearer-токен A2A-партнера `homework-client` для `/a2a/v1`. |
 | `GRAFANA_ADMIN_PASSWORD` | ✅ | Секрет | lgtm | Пароль користувача Grafana `admin` (http://127.0.0.1:3000). |
+| `GRAFANA_PORT` | ➖ | — | docker compose | Порт Grafana на хості (лише localhost). За замовчуванням `3000`; змініть, якщо порт зайнятий. |
 
 `init` заповнює лише порожні значення, тож ніколи не замінює токен, який ви вже
 використовуєте. Щоб ротувати токен, очистіть його в `.env`, запустіть `init` і
